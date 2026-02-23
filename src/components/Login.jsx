@@ -61,10 +61,7 @@ const Login = () => {
         </form>
 
         <div className="login-hint">
-          <p><strong>Тестовые аккаунты:</strong></p>
-          <p>Админ: admin / admin123</p>
-          <p>Банкир: banker / banker123</p>
-          <p>Пользователь: user / user123</p>
+        
         </div>
       </div>
     </div>

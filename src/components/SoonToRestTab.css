@@ -1,0 +1,18 @@
+.soon-to-rest-tab {
+  width: 100%;
+}
+
+.soon-to-rest-header {
+  margin-bottom: 16px;
+}
+
+.soon-to-rest-header h3 {
+  margin: 0 0 4px 0;
+  font-size: 1.125rem;
+}
+
+.soon-to-rest-header p {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}

@@ -1,0 +1,299 @@
+/* ===== InfoLKModal — Responsive ===== */
+.info-modal {
+  max-width: 640px;
+}
+
+.info-content {
+  padding: 20px;
+  max-height: 65vh;
+  max-height: 65dvh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.info-section {
+  margin-bottom: 24px;
+}
+
+.info-section:last-child {
+  margin-bottom: 0;
+}
+
+.info-section h3 {
+  margin: 0 0 12px 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--text);
+  padding-bottom: 10px;
+  border-bottom: 2px solid var(--border);
+}
+
+.info-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+.info-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.info-item.full-width {
+  grid-column: 1 / -1;
+}
+
+.info-label {
+  font-size: 0.6875rem;
+  color: var(--text-secondary);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.info-value {
+  font-size: 0.9375rem;
+  color: var(--text);
+}
+
+/* Banker request blocks */
+.banker-request-pending {
+  background: var(--warning-bg);
+  border: 1px solid var(--warning);
+  border-radius: var(--radius);
+  padding: 14px;
+}
+
+.request-message {
+  margin: 0 0 8px 0;
+  font-size: 0.9375rem;
+  color: var(--text);
+}
+
+.request-date {
+  margin: 0 0 12px 0;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+
+.request-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.btn-approve,
+.btn-reject {
+  padding: 12px 18px;
+  border-radius: var(--radius);
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: all 0.2s;
+}
+
+.btn-approve {
+  background: var(--success);
+  color: white;
+}
+
+.btn-approve:hover {
+  background: #059669;
+}
+
+.btn-reject {
+  background: var(--error-bg);
+  color: var(--error);
+}
+
+.btn-reject:hover {
+  background: #fecaca;
+}
+
+.reject-form {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--warning);
+}
+
+.reject-form textarea {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.9375rem;
+  font-family: inherit;
+  margin-bottom: 12px;
+  resize: vertical;
+  min-height: 80px;
+  box-sizing: border-box;
+}
+
+.reject-form textarea:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+.reject-form-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.reject-form-actions button {
+  padding: 10px 18px;
+  border-radius: var(--radius);
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.reject-form-actions button:hover {
+  background: var(--bg);
+}
+
+.btn-confirm-reject {
+  background: var(--error-bg) !important;
+  color: var(--error) !important;
+  border-color: #fecaca !important;
+}
+
+.btn-confirm-reject:hover {
+  background: #fecaca !important;
+}
+
+.banker-request-approved {
+  background: var(--success-bg);
+  border: 1px solid var(--success);
+  border-radius: var(--radius);
+  padding: 14px;
+}
+
+.banker-request-approved p {
+  margin: 0 0 6px 0;
+  font-size: 0.9375rem;
+  color: #047857;
+  font-weight: 600;
+}
+
+.banker-request-rejected {
+  background: var(--error-bg);
+  border: 1px solid var(--error);
+  border-radius: var(--radius);
+  padding: 14px;
+}
+
+.banker-request-rejected p {
+  margin: 0 0 6px 0;
+  font-size: 0.9375rem;
+  color: #b91c1c;
+  font-weight: 600;
+}
+
+.rejection-reason {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #fecaca;
+  font-size: 0.8125rem;
+  color: var(--text);
+}
+
+.banker-request-info {
+  background: var(--primary-light);
+  border: 1px solid var(--primary);
+  border-radius: var(--radius);
+  padding: 14px;
+}
+
+.banker-request-info p {
+  margin: 0 0 6px 0;
+  font-size: 0.9375rem;
+  color: var(--primary-hover);
+  font-weight: 600;
+}
+
+.btn-banker-request {
+  width: 100%;
+  padding: 14px;
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: var(--radius);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.btn-banker-request:hover {
+  background: var(--primary-hover);
+}
+
+/* History */
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.history-item {
+  padding: 12px;
+  background: var(--bg);
+  border-radius: var(--radius);
+  border-left: 4px solid var(--primary);
+}
+
+.history-status-change {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+
+.history-from,
+.history-to {
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.history-arrow {
+  color: var(--text-secondary);
+  font-weight: bold;
+}
+
+.history-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.history-author {
+  font-weight: 600;
+}
+
+/* Tablet+ */
+@media (min-width: 640px) {
+  .info-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+  }
+
+  .info-content {
+    padding: 24px;
+    max-height: 70vh;
+  }
+
+  .info-section h3 {
+    font-size: 1rem;
+  }
+}

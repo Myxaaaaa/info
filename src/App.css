@@ -1,0 +1,5 @@
+/* App-level layout — no legacy Vite styles */
+#root {
+  width: 100%;
+  margin: 0 auto;
+}

@@ -1,0 +1,487 @@
+/* ===== DataTable — Responsive table & cards ===== */
+.data-table-wrapper {
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.data-table-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  align-items: center;
+}
+
+.table-search {
+  flex: 1 1 100%;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.9375rem;
+  font-family: inherit;
+  background: var(--surface);
+}
+
+.table-search:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+.table-status-filter {
+  flex: 1 1 auto;
+  min-width: 120px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.9375rem;
+  font-family: inherit;
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.table-add-btn {
+  padding: 12px 18px;
+  background: var(--success);
+  color: white;
+  border: none;
+  border-radius: var(--radius);
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.table-add-btn:hover {
+  background: #059669;
+}
+
+.table-refresh-btn {
+  padding: 12px 18px;
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: var(--radius);
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.table-refresh-btn:hover:not(:disabled) {
+  background: var(--primary-hover);
+}
+
+.table-refresh-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.refresh-msg {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  width: 100%;
+}
+
+/* Bulk actions */
+.bulk-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  background: var(--primary-light);
+  border-bottom: 1px solid var(--border);
+}
+
+.bulk-count {
+  font-size: 0.875rem;
+  font-weight: 600;
+  margin-right: 8px;
+}
+
+.bulk-btn {
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+}
+
+.bulk-delete { background: var(--error-bg); color: var(--error); }
+.bulk-delete:hover { background: #fecaca; }
+.bulk-status { background: var(--surface); border: 1px solid var(--border); }
+.bulk-status:hover { background: var(--bg); }
+.bulk-raise { background: var(--primary); color: white; }
+.bulk-raise:hover { background: var(--primary-hover); }
+.bulk-clear { background: transparent; color: var(--text-secondary); }
+.bulk-clear:hover { color: var(--text); }
+
+.col-checkbox {
+  width: 40px;
+  text-align: center;
+}
+
+.col-checkbox input {
+  cursor: pointer;
+}
+
+.card-checkbox {
+  margin-right: 6px;
+}
+
+.bulk-status-modal {
+  max-width: 360px;
+}
+
+.bulk-status-form select {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.9375rem;
+  margin-bottom: 14px;
+}
+
+.bulk-status-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.bulk-status-actions .btn-primary {
+  background: var(--primary);
+  color: white;
+  padding: 10px 18px;
+  border: none;
+  border-radius: var(--radius);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.bulk-status-actions .btn-primary:hover:not(:disabled) {
+  background: var(--primary-hover);
+}
+
+.bulk-status-actions .btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Оборот за квартал — инлайн инпут */
+.col-turnover {
+  min-width: 100px;
+}
+
+.turnover-input-inline {
+  width: 100%;
+  min-width: 80px;
+  max-width: 140px;
+  padding: 6px 10px;
+  font-size: 0.8125rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.turnover-input-inline:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+/* Мигание жёлтым — вкладка «Скоро на отдых» */
+.data-table-wrapper.blink-yellow .data-table tbody tr,
+.data-table-wrapper.blink-yellow .data-card {
+  animation: blink-yellow 1.5s ease-in-out infinite;
+}
+
+@keyframes blink-yellow {
+  0%, 100% {
+    background-color: var(--surface);
+  }
+  50% {
+    background-color: #fef9c3;
+  }
+}
+
+.data-table-wrapper.blink-yellow .data-card {
+  background: var(--bg);
+}
+
+.data-table-wrapper.blink-yellow .data-table tbody tr:hover,
+.data-table-wrapper.blink-yellow .data-card:hover {
+  animation: none;
+  background: #fef9c3 !important;
+}
+
+/* Table view — hidden on mobile */
+.table-view {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.table-view {
+  display: none;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.data-table th,
+.data-table td {
+  padding: 12px 14px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+
+.data-table th {
+  background: var(--bg);
+  color: var(--text-secondary);
+  font-weight: 600;
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+.data-table tbody tr:hover {
+  background: var(--bg);
+}
+
+.data-table .col-name {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.data-table .col-extra {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-select {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 0.8125rem;
+  font-family: inherit;
+  background: var(--surface);
+  min-width: 100px;
+  cursor: pointer;
+}
+
+.status-select:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.data-table tbody tr [class^="status-"]:not(.status-select) {
+  background: var(--bg-dark);
+  color: var(--text);
+}
+
+.table-footer {
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+
+.col-actions {
+  width: 100px;
+  text-align: center;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  align-items: center;
+}
+
+.btn-info,
+.btn-edit {
+  background: none;
+  border: none;
+  font-size: 1.125rem;
+  cursor: pointer;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  transition: background 0.2s;
+  line-height: 1;
+}
+
+.btn-info:hover {
+  background: var(--primary-light);
+}
+
+.btn-edit:hover {
+  background: var(--warning-bg);
+}
+
+.btn-send-rest {
+  padding: 6px 12px;
+  font-size: 0.75rem;
+  background: #dbeafe;
+  color: #1d4ed8;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.btn-send-rest:hover {
+  background: #bfdbfe;
+}
+
+.request-badge {
+  display: inline-block;
+  font-size: 1.125rem;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* ===== Card view (mobile) ===== */
+.card-view {
+  display: block;
+  padding: 12px;
+  max-height: none;
+}
+
+.data-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  margin-bottom: 10px;
+}
+
+.data-card:last-child {
+  margin-bottom: 0;
+}
+
+.data-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.data-card-num {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-weight: 600;
+  min-width: 20px;
+}
+
+.data-card-name {
+  flex: 1;
+  font-weight: 600;
+  color: var(--text);
+  font-size: 0.9375rem;
+}
+
+.data-card-status {
+  flex-shrink: 0;
+}
+
+.data-card-status .status-select {
+  min-width: 100px;
+  padding: 6px 10px;
+}
+
+.data-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.data-card-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.8125rem;
+}
+
+.data-card-label {
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.data-card-value {
+  color: var(--text);
+  text-align: right;
+  word-break: break-word;
+}
+
+.data-card-actions {
+  display: flex;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.data-card-actions .btn-info,
+.data-card-actions .btn-edit {
+  flex: 1;
+  font-size: 0.8125rem;
+  padding: 10px 12px;
+}
+
+/* Tablet: show table, hide cards */
+@media (min-width: 768px) {
+  .data-table-controls {
+    padding: 16px;
+    gap: 12px;
+  }
+
+  .table-search {
+    flex: 1 1 auto;
+    min-width: 200px;
+  }
+
+  .table-view {
+    display: block;
+  }
+
+  .card-view {
+    display: none;
+  }
+}
+
+/* Desktop */
+@media (min-width: 1024px) {
+  .data-table-controls {
+    padding: 18px 20px;
+  }
+
+  .col-actions {
+    width: 120px;
+  }
+
+  .action-buttons {
+    gap: 8px;
+  }
+}

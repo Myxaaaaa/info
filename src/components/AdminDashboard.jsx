@@ -19,10 +19,10 @@ const AdminDashboard = () => {
   const [passNew, setPassNew] = useState('')
   const [passMsg, setPassMsg] = useState('')
 
-  const handleAddUser = (e) => {
+  const handleAddUser = async (e) => {
     e.preventDefault()
     setAddError('')
-    const result = addUser(newUsername, newPassword, newRole)
+    const result = await addUser(newUsername, newPassword, newRole)
     if (result.success) {
       setShowAddUser(false)
       setNewUsername('')
@@ -33,15 +33,15 @@ const AdminDashboard = () => {
     }
   }
 
-  const handleDeleteUser = (id) => {
-    const result = deleteUser(id)
+  const handleDeleteUser = async (id) => {
+    const result = await deleteUser(id)
     if (!result.success) alert(result.error)
   }
 
-  const handleChangePassword = (e) => {
+  const handleChangePassword = async (e) => {
     e.preventDefault()
     setPassMsg('')
-    const result = changeOwnPassword(passCurrent, passNew)
+    const result = await changeOwnPassword(passCurrent, passNew)
     if (result.success) {
       setPassCurrent('')
       setPassNew('')

@@ -77,7 +77,14 @@ const InfoLKModal = ({ lk, isOpen, onClose }) => {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content info-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>Информация о ЛК</h2>
+          <h2>
+            Информация о ЛК
+            {lk.name && (
+              <span className="modal-subtitle">
+                &nbsp;· {lk.name}
+              </span>
+            )}
+          </h2>
           <button className="modal-close" onClick={onClose}>×</button>
         </div>
 

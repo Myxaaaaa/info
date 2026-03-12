@@ -1,9 +1,9 @@
 /* ===== DataTable — Responsive table & cards ===== */
 .data-table-wrapper {
   background: var(--surface);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-xl);
   border: 1px solid var(--border);
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-lg);
   overflow: hidden;
 }
 
@@ -14,6 +14,8 @@
   padding: 14px 16px;
   border-bottom: 1px solid var(--border);
   align-items: center;
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.9), rgba(15, 23, 42, 0.8));
+  color: var(--text);
 }
 
 .table-search {
@@ -24,7 +26,8 @@
   border-radius: var(--radius);
   font-size: 0.9375rem;
   font-family: inherit;
-  background: var(--surface);
+  background: rgba(15, 23, 42, 0.8);
+  color: var(--text);
 }
 
 .table-search:focus {
@@ -40,7 +43,8 @@
   border-radius: var(--radius);
   font-size: 0.9375rem;
   font-family: inherit;
-  background: var(--surface);
+  background: rgba(15, 23, 42, 0.8);
+  color: var(--text);
   cursor: pointer;
 }
 
@@ -252,7 +256,8 @@
 }
 
 .data-table tbody tr:hover {
-  background: var(--bg);
+  background: var(--bg-dark);
+  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.2);
 }
 
 .data-table .col-name {
@@ -369,11 +374,12 @@
 }
 
 .data-card {
-  background: var(--bg);
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 14px;
   margin-bottom: 10px;
+  box-shadow: var(--shadow);
 }
 
 .data-card:last-child {

@@ -61,7 +61,7 @@ const Login = () => {
         </form>
 
         <div className="login-hint">
-        
+          <p>Введите свой логин и пароль, выданные администратором.</p>
         </div>
       </div>
     </div>

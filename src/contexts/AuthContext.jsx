@@ -1,117 +1,126 @@
-import React, { createContext, useState, useContext, useCallback } from 'react'
+import React, { createContext, useState, useContext, useCallback, useEffect } from 'react'
 
 const AuthContext = createContext(null)
 
-const USERS_KEY = 'lk_users'
-const DEFAULT_USERS = [
-  { id: '1', username: 'admin', password: 'admin123', role: 'admin' },
-  { id: '2', username: 'banker', password: 'banker123', role: 'banker' },
-  { id: '3', username: 'user', password: 'user123', role: 'user' },
-]
-
-const loadUsers = () => {
-  try {
-    const saved = localStorage.getItem(USERS_KEY)
-    if (saved) {
-      const parsed = JSON.parse(saved)
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed
-    }
-  } catch (_) {}
-  return DEFAULT_USERS
-}
-
 export const AuthProvider = ({ children }) => {
-  const [users, setUsers] = useState(loadUsers)
+  const [users, setUsers] = useState([])
   const [user, setUser] = useState(null)
   const [isLoading, setIsLoading] = useState(false)
-
-  const saveUsers = useCallback((newUsers) => {
-    setUsers(newUsers)
-    localStorage.setItem(USERS_KEY, JSON.stringify(newUsers))
-  }, [])
 
   const login = async (username, password) => {
     setIsLoading(true)
     await new Promise((r) => setTimeout(r, 400))
-    const found = users.find(
-      (u) => u.username.toLowerCase() === username.toLowerCase() && u.password === password
-    )
-    setIsLoading(false)
-    if (found) {
-      const userData = { id: found.id, username: found.username, role: found.role }
-      setUser(userData)
-      localStorage.setItem('user', JSON.stringify(userData))
-      return { success: true, user: userData }
+    try {
+      const res = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      })
+      const data = await res.json()
+      setIsLoading(false)
+      if (!res.ok || !data.success) {
+        return { success: false, error: data.error || 'Ошибка входа' }
+      }
+      setUser(data.user)
+      return { success: true, user: data.user }
+    } catch (e) {
+      setIsLoading(false)
+      return { success: false, error: 'Сервер недоступен' }
     }
-    return { success: false, error: 'Неверный логин или пароль' }
   }
 
   const logout = useCallback(() => {
     setUser(null)
-    localStorage.removeItem('user')
   }, [])
 
   // Admin: CRUD users
   const addUser = useCallback(
-    (username, password, role) => {
-      const exists = users.some((u) => u.username.toLowerCase() === username.toLowerCase())
-      if (exists) return { success: false, error: 'Пользователь с таким логином уже есть' }
-      const maxId = Math.max(0, ...users.map((u) => parseInt(u.id) || 0))
-      const newUser = {
-        id: String(maxId + 1),
-        username: username.trim(),
-        password: password.trim(),
-        role: role || 'user',
+    async (username, password, role) => {
+      try {
+        const res = await fetch('/api/users', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password, role }),
+        })
+        const data = await res.json()
+        if (!res.ok || !data.success) {
+          return { success: false, error: data.error || 'Ошибка' }
+        }
+        // Обновляем список пользователей
+        const listRes = await fetch('/api/users')
+        const listData = await listRes.json()
+        if (Array.isArray(listData.users)) {
+          setUsers(listData.users)
+        }
+        return { success: true }
+      } catch (e) {
+        return { success: false, error: 'Сервер недоступен' }
       }
-      const newUsers = [...users, newUser]
-      saveUsers(newUsers)
-      return { success: true }
     },
-    [users, saveUsers]
+    []
   )
 
   const updateUser = useCallback(
     (id, updates) => {
-      const newUsers = users.map((u) =>
-        u.id === id ? { ...u, ...updates } : u
-      )
-      saveUsers(newUsers)
+      // Для простоты сейчас не редактируем других пользователей, кроме смены своего пароля.
+      console.warn('updateUser is not implemented for server auth', id, updates)
     },
-    [users, saveUsers]
+    []
   )
 
   const deleteUser = useCallback(
-    (id) => {
+    async (id) => {
       if (user?.id === id) return { success: false, error: 'Нельзя удалить себя' }
-      saveUsers(users.filter((u) => u.id !== id))
-      return { success: true }
+      try {
+        const res = await fetch(`/api/users/${id}`, { method: 'DELETE' })
+        const data = await res.json()
+        if (!res.ok || !data.success) {
+          return { success: false, error: data.error || 'Ошибка' }
+        }
+        const listRes = await fetch('/api/users')
+        const listData = await listRes.json()
+        if (Array.isArray(listData.users)) {
+          setUsers(listData.users)
+        }
+        return { success: true }
+      } catch (e) {
+        return { success: false, error: 'Сервер недоступен' }
+      }
     },
-    [users, user, saveUsers]
+    [user]
   )
 
   const changeOwnPassword = useCallback(
-    (currentPassword, newPassword) => {
+    async (currentPassword, newPassword) => {
       if (!user?.id) return { success: false, error: 'Не авторизован' }
-      const u = users.find((x) => x.id === user.id)
-      if (!u) return { success: false, error: 'Пользователь не найден' }
-      if (u.password !== currentPassword) return { success: false, error: 'Неверный текущий пароль' }
-      const trimmed = newPassword.trim()
-      if (!trimmed) return { success: false, error: 'Введите новый пароль' }
-      updateUser(user.id, { password: trimmed })
-      return { success: true }
+      try {
+        const res = await fetch(`/api/users/${user.id}/change_password`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ currentPassword, newPassword }),
+        })
+        const data = await res.json()
+        if (!res.ok || !data.success) {
+          return { success: false, error: data.error || 'Ошибка' }
+        }
+        return { success: true }
+      } catch (e) {
+        return { success: false, error: 'Сервер недоступен' }
+      }
     },
-    [user, users, updateUser]
+    [user]
   )
 
-  React.useEffect(() => {
-    const saved = localStorage.getItem('user')
-    if (saved) {
-      try {
-        setUser(JSON.parse(saved))
-      } catch (_) {
-        localStorage.removeItem('user')
-      }
-    }
+  useEffect(() => {
+    // Загружаем пользователей с бэкенда (общие для всех устройств)
+    fetch('/api/users')
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data.users)) {
+          setUsers(data.users)
+        }
+      })
+      .catch(() => {})
   }, [])
 
   const value = {

@@ -11,16 +11,26 @@ const PORT = process.env.PORT || 3000
 
 app.use(express.json({ limit: '2mb' }))
 
-// ========== State (in production use Redis or DB) ==========
+// ========== In-memory state (для Railway; в проде использовать БД) ==========
 let state = {
   rows: [],
   bankerRequests: {},
   raisedFromRest: {},
 }
 
+// Простая модель пользователей (общее для всех устройств на одном бэкенде)
+let users = [
+  {
+    id: 1,
+    username: 'admin',
+    password: '7895142358!@',
+    role: 'admin',
+  },
+]
+
 const THRESHOLD = 4_000_000
 
-// ========== API ==========
+// ========== API: данные ЛК / бот ==========
 app.get('/api/state', (req, res) => {
   res.json(state)
 })
@@ -61,6 +71,80 @@ app.get('/api/rows_by_status', (req, res) => {
     list = list.filter((r) => (r.status || '').toLowerCase() === status)
   }
   res.json({ list, count: list.length })
+})
+
+// ========== API: пользователи / авторизация ==========
+
+app.post('/api/login', (req, res) => {
+  const { username, password } = req.body || {}
+  if (!username || !password) {
+    return res.status(400).json({ success: false, error: 'Введите логин и пароль' })
+  }
+  const found = users.find(
+    (u) =>
+      u.username.toLowerCase() === String(username).toLowerCase() &&
+      u.password === String(password)
+  )
+  if (!found) {
+    return res.status(401).json({ success: false, error: 'Неверный логин или пароль' })
+  }
+  const user = { id: found.id, username: found.username, role: found.role }
+  res.json({ success: true, user })
+})
+
+app.get('/api/users', (req, res) => {
+  res.json({ users })
+})
+
+app.post('/api/users', (req, res) => {
+  const { username, password, role } = req.body || {}
+  const name = String(username || '').trim()
+  const pass = String(password || '').trim()
+  const r = (role || 'user').trim() || 'user'
+
+  if (!name || !pass) {
+    return res.status(400).json({ success: false, error: 'Укажите логин и пароль' })
+  }
+
+  const exists = users.some((u) => u.username.toLowerCase() === name.toLowerCase())
+  if (exists) {
+    return res.status(409).json({ success: false, error: 'Пользователь с таким логином уже есть' })
+  }
+
+  const maxId = users.reduce((m, u) => (u.id > m ? u.id : m), 0)
+  const newUser = {
+    id: maxId + 1,
+    username: name,
+    password: pass,
+    role: r,
+  }
+  users = [...users, newUser]
+  res.status(201).json({ success: true })
+})
+
+app.delete('/api/users/:id', (req, res) => {
+  const id = parseInt(req.params.id, 10)
+  if (!id) return res.status(400).json({ success: false, error: 'Некорректный ID' })
+
+  const exists = users.find((u) => u.id === id)
+  if (!exists) return res.status(404).json({ success: false, error: 'Пользователь не найден' })
+
+  users = users.filter((u) => u.id !== id)
+  res.json({ success: true })
+})
+
+app.post('/api/users/:id/change_password', (req, res) => {
+  const id = parseInt(req.params.id, 10)
+  const { currentPassword, newPassword } = req.body || {}
+  const user = users.find((u) => u.id === id)
+  if (!user) return res.status(404).json({ success: false, error: 'Пользователь не найден' })
+  if (user.password !== String(currentPassword || '')) {
+    return res.status(400).json({ success: false, error: 'Неверный текущий пароль' })
+  }
+  const trimmed = String(newPassword || '').trim()
+  if (!trimmed) return res.status(400).json({ success: false, error: 'Введите новый пароль' })
+  user.password = trimmed
+  res.json({ success: true })
 })
 
 app.post('/api/update_status', (req, res) => {

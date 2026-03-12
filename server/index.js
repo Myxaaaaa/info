@@ -1,7 +1,6 @@
 import express from 'express'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
-import TelegramBot from 'node-telegram-bot-api'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -157,146 +156,16 @@ app.post('/api/update_status', (req, res) => {
   res.json({ ok: true })
 })
 
-// ========== Telegram Bot ==========
-const token = process.env.BOT_TOKEN
-let bot = null
-if (token) {
-  bot = new TelegramBot(token, { polling: true })
+// ========== Telegram Bot — отключен (добавим позже) ==========
 
-  const statusList = () => {
-    const statuses = [...new Set(state.rows.map((r) => (r.status || '').toLowerCase()).filter(Boolean))]
-    return statuses.length ? statuses.sort() : ['актив', 'отдых', 'блок', 'вылет', 'заява']
-  }
-
-  bot.onText(/\/start/, (msg) => {
-    const chatId = msg.chat.id
-    bot.sendMessage(
-      chatId,
-      'Привет! Я бот ЛК.\n\n' +
-        'По вкладкам (как на сайте):\n' +
-        '/list — все ЛК\n' +
-        '/list статус — ЛК по статусу (актив, отдых, блок, вылет, заява...)\n' +
-        '/soon — скоро на отдых (оборот ≥ 4 млн)\n' +
-        '/raise — кого поднять с отдыха\n\n' +
-        'Изменить:\n' +
-        '/set_status id статус — сменить статус ЛК\n' +
-        '/send_rest id — отправить на отдых (статус → отдых)'
-    )
-  })
-
-  bot.onText(/\/list(?:\s+(.+))?/, async (msg, match) => {
-    const chatId = msg.chat.id
-    const status = (match[1] || '').trim().toLowerCase()
-    try {
-      let list = state.rows
-      if (status) {
-        list = list.filter((r) => (r.status || '').toLowerCase() === status)
-      }
-      if (list.length === 0) {
-        return bot.sendMessage(chatId, status ? `Нет ЛК со статусом «${status}»` : 'Нет ЛК.')
-      }
-      const lines = list.slice(0, 40).map((r, i) => {
-        const name = r.name || r.card || '—'
-        const st = r.status ? ` [${r.status}]` : ''
-        return `${i + 1}. #${r.id} ${name}${st}`
-      })
-      const title = status ? `Статус «${status}» (${list.length})` : `Все ЛК (${list.length})`
-      await bot.sendMessage(chatId, `${title}:\n\n${lines.join('\n')}` + (list.length > 40 ? '\n\n... и ещё ' + (list.length - 40) : ''))
-    } catch (e) {
-      await bot.sendMessage(chatId, 'Ошибка: ' + (e.message || 'нет данных'))
-    }
-  })
-
-  bot.onText(/\/soon/, async (msg) => {
-    const chatId = msg.chat.id
-    try {
-      const list = state.rows.filter((r) => (r.turnover || 0) >= THRESHOLD)
-      if (list.length === 0) {
-        return bot.sendMessage(chatId, 'Нет ЛК с оборотом ≥ 4 млн.')
-      }
-      const lines = list.slice(0, 50).map((r, i) => {
-        const name = r.name || r.card || '—'
-        const turnover = r.turnover ? new Intl.NumberFormat('ru-RU').format(r.turnover) : '—'
-        return `${i + 1}. ${name} — ${turnover}`
-      })
-      const text = `Скоро на отдых (${list.length}):\n\n${lines.join('\n')}` + (list.length > 50 ? '\n\n... и ещё ' + (list.length - 50) : '')
-      await bot.sendMessage(chatId, text)
-    } catch (e) {
-      await bot.sendMessage(chatId, 'Ошибка: ' + (e.message || 'нет данных'))
-    }
-  })
-
-  bot.onText(/\/raise/, async (msg) => {
-    const chatId = msg.chat.id
-    try {
-      const pending = Object.entries(state.bankerRequests)
-        .filter(([, r]) => r?.status === 'pending' || r?.status === 're_raise_pending')
-      if (pending.length === 0) {
-        return bot.sendMessage(chatId, 'Нет активных запросов на поднятие с отдыха.')
-      }
-      const lines = pending.map(([id, r]) => {
-        const row = state.rows.find((x) => x.id === parseInt(id, 10))
-        const lk = row ? row.name || row.card || `#${id}` : `#${id}`
-        return `• #${id} ${lk} — банкир ${r.banker}`
-      })
-      const text = `Поднять с отдыха (${pending.length}):\n\n${lines.join('\n')}\n\nИспользуй /set_status ${pending[0][0]} актив — чтобы подтвердить.`
-      await bot.sendMessage(chatId, text)
-    } catch (e) {
-      await bot.sendMessage(chatId, 'Ошибка: ' + (e.message || 'нет данных'))
-    }
-  })
-
-  bot.onText(/\/set_status\s+(\d+)\s+(.+)/, async (msg, match) => {
-    const chatId = msg.chat.id
-    const id = parseInt(match[1], 10)
-    const status = (match[2] || '').trim()
-    try {
-      const row = state.rows.find((r) => r.id === id)
-      if (!row) return bot.sendMessage(chatId, `ЛК #${id} не найден.`)
-      state.rows = state.rows.map((r) => (r.id === id ? { ...r, status } : r))
-      await bot.sendMessage(chatId, `Статус ЛК #${id} (${row.name || row.card || '—'}) изменён на «${status}».`)
-    } catch (e) {
-      await bot.sendMessage(chatId, 'Ошибка: ' + (e.message || ''))
-    }
-  })
-
-  bot.onText(/\/send_rest\s+(\d+)/, async (msg, match) => {
-    const chatId = msg.chat.id
-    const id = parseInt(match[1], 10)
-    try {
-      const row = state.rows.find((r) => r.id === id)
-      if (!row) return bot.sendMessage(chatId, `ЛК #${id} не найден.`)
-      state.rows = state.rows.map((r) => (r.id === id ? { ...r, status: 'отдых' } : r))
-      await bot.sendMessage(chatId, `ЛК #${id} (${row.name || row.card || '—'}) отправлен на отдых.`)
-    } catch (e) {
-      await bot.sendMessage(chatId, 'Ошибка: ' + (e.message || ''))
-    }
-  })
-
-  console.log('Telegram bot started')
-} else {
-  console.log('BOT_TOKEN not set — bot disabled')
-}
-
-// Уведомления из фронта (рассылка)
+// Заглушка для уведомлений, чтобы фронт не падал
 app.post('/api/notify', async (req, res) => {
-  const { text, chatId } = req.body || {}
+  const { text } = req.body || {}
   if (!text || typeof text !== 'string') {
     return res.status(400).json({ success: false, error: 'Нет текста сообщения' })
   }
-  if (!bot || !token) {
-    return res.status(500).json({ success: false, error: 'Бот не сконфигурирован' })
-  }
-  const targetChatId = chatId || process.env.BOT_CHAT_ID
-  if (!targetChatId) {
-    return res.status(400).json({ success: false, error: 'Не указан chatId' })
-  }
-  try {
-    await bot.sendMessage(targetChatId, text)
-    res.json({ success: true })
-  } catch (e) {
-    res.status(500).json({ success: false, error: 'Не удалось отправить сообщение' })
-  }
+  // Просто подтверждаем приём, без отправки в Telegram
+  return res.json({ success: true, disabled: true })
 })
 
 // ========== Static (Vite build) ==========

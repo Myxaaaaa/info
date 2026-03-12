@@ -136,7 +136,6 @@ export const AuthProvider = ({ children }) => {
     addUser,
     updateUser,
     deleteUser,
-    saveUsers,
     changeOwnPassword,
   }
 

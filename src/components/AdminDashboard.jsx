@@ -203,18 +203,11 @@ const AdminDashboard = () => {
             {/* Telegram */}
             <section className="admin-section">
               <h2>Telegram — уведомления</h2>
-              <p className="admin-hint">Уведомления при запросе поднятия с отдыха и при обороте ≥ 4.9 млн.</p>
+              <p className="admin-hint">
+                Бот берёт токен с сервера. Здесь укажи только ID чата/группы, куда слать уведомления
+                (например, -1001234567890).
+              </p>
               <div className="admin-form-row">
-                <div className="form-group">
-                  <label>URL бота</label>
-                  <input
-                    type="url"
-                    className="admin-input"
-                    placeholder="https://api.telegram.org/bot.../sendMessage"
-                    value={telegramUrl}
-                    onChange={(e) => setTelegramUrl(e.target.value)}
-                  />
-                </div>
                 <div className="form-group">
                   <label>ID чата/группы</label>
                   <input

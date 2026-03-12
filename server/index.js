@@ -159,8 +159,9 @@ app.post('/api/update_status', (req, res) => {
 
 // ========== Telegram Bot ==========
 const token = process.env.BOT_TOKEN
+let bot = null
 if (token) {
-  const bot = new TelegramBot(token, { polling: true })
+  bot = new TelegramBot(token, { polling: true })
 
   const statusList = () => {
     const statuses = [...new Set(state.rows.map((r) => (r.status || '').toLowerCase()).filter(Boolean))]
@@ -276,6 +277,27 @@ if (token) {
 } else {
   console.log('BOT_TOKEN not set — bot disabled')
 }
+
+// Уведомления из фронта (рассылка)
+app.post('/api/notify', async (req, res) => {
+  const { text, chatId } = req.body || {}
+  if (!text || typeof text !== 'string') {
+    return res.status(400).json({ success: false, error: 'Нет текста сообщения' })
+  }
+  if (!bot || !token) {
+    return res.status(500).json({ success: false, error: 'Бот не сконфигурирован' })
+  }
+  const targetChatId = chatId || process.env.BOT_CHAT_ID
+  if (!targetChatId) {
+    return res.status(400).json({ success: false, error: 'Не указан chatId' })
+  }
+  try {
+    await bot.sendMessage(targetChatId, text)
+    res.json({ success: true })
+  } catch (e) {
+    res.status(500).json({ success: false, error: 'Не удалось отправить сообщение' })
+  }
+})
 
 // ========== Static (Vite build) ==========
 app.use(express.static(join(__dirname, '../dist')))

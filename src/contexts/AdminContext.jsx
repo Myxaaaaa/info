@@ -61,21 +61,17 @@ export const AdminProvider = ({ children }) => {
 
   const sendTelegramNotification = useCallback(
     async (message) => {
-      const url = telegramUrl || localStorage.getItem(TELEGRAM_KEY)
       const chatId = telegramChatId || localStorage.getItem(TELEGRAM_CHAT_KEY)
-      if (!url?.trim()) return
+      if (!chatId?.trim()) return
       try {
-        const body = chatId?.trim()
-          ? JSON.stringify({ chat_id: chatId.trim(), text: message })
-          : JSON.stringify({ text: message })
-        await fetch(url, {
+        await fetch('/api/notify', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body,
+          body: JSON.stringify({ text: message, chatId: chatId.trim() }),
         }).catch(() => {})
       } catch (_) {}
     },
-    [telegramUrl, telegramChatId]
+    [telegramChatId]
   )
 
   const value = {

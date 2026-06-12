@@ -1,11 +1,35 @@
 import React, { createContext, useState, useContext, useCallback, useEffect } from 'react'
 
 const AuthContext = createContext(null)
+const AUTH_SESSION_KEY = 'lk_auth_session'
+
+const saveSession = (sessionUser) => {
+  try {
+    localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(sessionUser))
+  } catch (_) {}
+}
+
+const clearSession = () => {
+  try {
+    localStorage.removeItem(AUTH_SESSION_KEY)
+  } catch (_) {}
+}
+
+const loadSession = () => {
+  try {
+    const raw = localStorage.getItem(AUTH_SESSION_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    if (parsed?.id && parsed?.username && parsed?.role) return parsed
+  } catch (_) {}
+  return null
+}
 
 export const AuthProvider = ({ children }) => {
   const [users, setUsers] = useState([])
   const [user, setUser] = useState(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [authReady, setAuthReady] = useState(false)
 
   const login = async (username, password) => {
     setIsLoading(true)
@@ -22,6 +46,7 @@ export const AuthProvider = ({ children }) => {
         return { success: false, error: data.error || 'Ошибка входа' }
       }
       setUser(data.user)
+      saveSession(data.user)
       return { success: true, user: data.user }
     } catch (e) {
       setIsLoading(false)
@@ -31,6 +56,7 @@ export const AuthProvider = ({ children }) => {
 
   const logout = useCallback(() => {
     setUser(null)
+    clearSession()
   }, [])
 
   // Admin: CRUD users
@@ -112,16 +138,55 @@ export const AuthProvider = ({ children }) => {
   )
 
   useEffect(() => {
-    // Загружаем пользователей с бэкенда (общие для всех устройств)
+    let cancelled = false
+
+    const finishAuth = (sessionUser) => {
+      if (!cancelled) {
+        if (sessionUser) setUser(sessionUser)
+        setAuthReady(true)
+      }
+    }
+
+    const saved = loadSession()
+    if (!saved) {
+      finishAuth(null)
+    } else {
+      fetch(`/api/session?userId=${saved.id}`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.valid && data.user) {
+            saveSession(data.user)
+            finishAuth(data.user)
+          } else {
+            clearSession()
+            finishAuth(null)
+          }
+        })
+        .catch(() => finishAuth(saved))
+    }
+
     fetch('/api/users')
       .then((res) => res.json())
       .then((data) => {
-        if (Array.isArray(data.users)) {
+        if (!cancelled && Array.isArray(data.users)) {
           setUsers(data.users)
         }
       })
       .catch(() => {})
+
+    return () => {
+      cancelled = true
+    }
   }, [])
+
+  const role = user?.role
+  const isAdmin = role === 'admin'
+  const isBanker = role === 'banker'
+  const isUser = role === 'user'
+  // Админ = полный доступ (банкир + оператор)
+  const canBanker = isAdmin || isBanker
+  const canOperator = isAdmin || isUser
+  const canEdit = !!user
 
   const value = {
     user,
@@ -129,10 +194,14 @@ export const AuthProvider = ({ children }) => {
     login,
     logout,
     isLoading,
+    authReady,
     isAuthenticated: !!user,
-    isAdmin: user?.role === 'admin',
-    isBanker: user?.role === 'banker',
-    isUser: user?.role === 'user',
+    isAdmin,
+    isBanker,
+    isUser,
+    canBanker,
+    canOperator,
+    canEdit,
     addUser,
     updateUser,
     deleteUser,

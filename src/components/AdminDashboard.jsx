@@ -3,11 +3,13 @@ import { useAuth } from '../contexts/AuthContext'
 import { useAdmin } from '../contexts/AdminContext'
 import { useData } from '../contexts/DataContext'
 import MainTabs from './MainTabs'
+import DashboardHeader from './DashboardHeader'
 import './AdminDashboard.css'
+import './Dashboard.css'
 
 const AdminDashboard = () => {
   const { user, users, logout, addUser, deleteUser, changeOwnPassword } = useAuth()
-  const { logs, telegramUrl, setTelegramUrl, telegramChatId, setTelegramChatId } = useAdmin()
+  const { logs, telegramChatId, setTelegramChatId, telegramEnabled } = useAdmin()
   const { rows, bankerRequests, approveReRaiseByAdmin } = useData()
   const [adminTab, setAdminTab] = useState('lk')
   const [showAddUser, setShowAddUser] = useState(false)
@@ -18,6 +20,9 @@ const AdminDashboard = () => {
   const [passCurrent, setPassCurrent] = useState('')
   const [passNew, setPassNew] = useState('')
   const [passMsg, setPassMsg] = useState('')
+  const [tgTestMsg, setTgTestMsg] = useState('')
+  const [tgChats, setTgChats] = useState([])
+  const [tgChatsLoading, setTgChatsLoading] = useState(false)
 
   const handleAddUser = async (e) => {
     e.preventDefault()
@@ -65,36 +70,28 @@ const AdminDashboard = () => {
 
   return (
     <div className="dashboard admin-dashboard">
-      <header className="dashboard-header">
-        <h1>Админ</h1>
-        <div className="user-info">
-          <div className="admin-main-tabs">
-            <button
-              className={`admin-tab-btn ${adminTab === 'lk' ? 'active' : ''}`}
-              onClick={() => setAdminTab('lk')}
-            >
-              ЛК
-            </button>
-            <button
-              className={`admin-tab-btn ${adminTab === 'admin' ? 'active' : ''}`}
-              onClick={() => setAdminTab('admin')}
-            >
-              Админка
-            </button>
-          </div>
-          <span>Админ: <strong>{user?.username}</strong></span>
-          <button onClick={logout} className="logout-button">Выйти</button>
+      <DashboardHeader title="Администрирование" user={user} role="admin" onLogout={logout}>
+        <div className="admin-main-tabs">
+          <button
+            type="button"
+            className={`admin-tab-btn ${adminTab === 'lk' ? 'active' : ''}`}
+            onClick={() => setAdminTab('lk')}
+          >
+            ЛК
+          </button>
+          <button
+            type="button"
+            className={`admin-tab-btn ${adminTab === 'admin' ? 'active' : ''}`}
+            onClick={() => setAdminTab('admin')}
+          >
+            Настройки
+          </button>
         </div>
-      </header>
+      </DashboardHeader>
 
       <main className="dashboard-content admin-content">
         {adminTab === 'lk' && (
-          <MainTabs
-            canEdit
-            showRefresh
-            showStatusSettings
-            isAdmin
-          />
+          <MainTabs showRefresh showStatusSettings />
         )}
 
         {adminTab === 'admin' && (
@@ -204,8 +201,13 @@ const AdminDashboard = () => {
             <section className="admin-section">
               <h2>Telegram — уведомления</h2>
               <p className="admin-hint">
-                Бот берёт токен с сервера. Здесь укажи только ID чата/группы, куда слать уведомления
-                (например, -1001234567890).
+                <strong>401 и 403 — это не chat ID!</strong> Это ошибки Telegram: 401 = плохой токен бота, 403 = бот не может писать в чат.
+              </p>
+              <p className="admin-hint">
+                1) Токен <code>BOT_TOKEN</code> в файле <code>.env</code> (от @BotFather). 2) Добавь бота в группу или напиши ему /start. 3) Укажи chat ID ниже.
+              </p>
+              <p className={`admin-hint ${telegramEnabled ? 'form-success' : 'form-error'}`}>
+                Статус бота: {telegramEnabled ? '✅ токен загружен' : '❌ нет BOT_TOKEN в .env — перезапусти сервер после добавления'}
               </p>
               <div className="admin-form-row">
                 <div className="form-group">
@@ -218,7 +220,75 @@ const AdminDashboard = () => {
                     onChange={(e) => setTelegramChatId(e.target.value)}
                   />
                 </div>
+                <button
+                  type="button"
+                  className="btn-add"
+                  disabled={!telegramEnabled || tgChatsLoading}
+                  onClick={async () => {
+                    setTgChatsLoading(true)
+                    setTgTestMsg('')
+                    try {
+                      const res = await fetch('/api/telegram/chats')
+                      const data = await res.json()
+                      if (data.success && data.chats?.length) {
+                        setTgChats(data.chats)
+                        setTgTestMsg('Выбери chat ID из списка ниже (после /start боту или сообщения в группе)')
+                      } else {
+                        setTgChats([])
+                        setTgTestMsg(
+                          data.error ||
+                            'Чаты не найдены. Напиши боту /start в личке или добавь в группу и отправь любое сообщение.'
+                        )
+                      }
+                    } catch {
+                      setTgTestMsg('❌ Сервер недоступен')
+                    }
+                    setTgChatsLoading(false)
+                  }}
+                >
+                  {tgChatsLoading ? 'Поиск...' : 'Найти chat ID'}
+                </button>
+                <button
+                  type="button"
+                  className="btn-add"
+                  disabled={!telegramEnabled || !telegramChatId?.trim()}
+                  onClick={async () => {
+                    setTgTestMsg('')
+                    try {
+                      const res = await fetch('/api/telegram/test', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ chatId: telegramChatId.trim() }),
+                      })
+                      const data = await res.json()
+                      setTgTestMsg(data.success ? '✅ Сообщение отправлено' : `❌ ${data.error || 'Ошибка'}`)
+                    } catch {
+                      setTgTestMsg('❌ Сервер недоступен')
+                    }
+                  }}
+                >
+                  Тест в Telegram
+                </button>
               </div>
+              {tgChats.length > 0 && (
+                <ul className="tg-chats-list">
+                  {tgChats.map((c) => (
+                    <li key={c.id}>
+                      <button
+                        type="button"
+                        className="tg-chat-pick"
+                        onClick={() => {
+                          setTelegramChatId(c.id)
+                          setTgTestMsg(`Выбран: ${c.title} (${c.id})`)
+                        }}
+                      >
+                        {c.title} — <code>{c.id}</code> ({c.type})
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {tgTestMsg && <p className={`admin-hint ${tgTestMsg.startsWith('✅') ? 'form-success' : 'form-error'}`}>{tgTestMsg}</p>}
             </section>
 
             {/* Логи */}

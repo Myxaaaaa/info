@@ -1,4 +1,3 @@
-/* ===== Dashboard — Responsive layout ===== */
 .dashboard {
   min-height: 100vh;
   min-height: 100dvh;
@@ -8,27 +7,46 @@
 }
 
 .dashboard-header {
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-  padding: 14px 20px;
-  padding-top: calc(14px + var(--safe-top));
+  background: linear-gradient(135deg, var(--mbank-green-darker) 0%, var(--primary) 100%);
+  padding: 0 20px;
+  padding-top: var(--safe-top);
+  min-height: var(--header-height);
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
   gap: 12px;
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-md);
   position: sticky;
   top: 0;
   z-index: 100;
 }
 
-.dashboard-header h1 {
+.header-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.header-brand .brand-logo {
+  background: rgba(255, 255, 255, 0.2);
+  box-shadow: none;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.header-titles h1 {
   margin: 0;
-  font-size: 1.125rem;
-  font-weight: 600;
-  color: var(--text);
+  font-size: 1.0625rem;
+  font-weight: 700;
+  color: var(--text-on-primary);
   letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.header-subtitle {
+  font-size: 0.6875rem;
+  color: rgba(255, 255, 255, 0.75);
+  font-weight: 500;
 }
 
 .user-info {
@@ -38,151 +56,112 @@
   gap: 10px;
 }
 
-.user-info span {
-  color: var(--text-secondary);
+.user-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: var(--radius-pill);
   font-size: 0.8125rem;
+  color: rgba(255, 255, 255, 0.9);
 }
 
-.user-info strong {
-  color: var(--text);
+.user-chip strong {
+  color: white;
   font-weight: 600;
 }
 
-.logout-button,
-.settings-button {
-  padding: 10px 16px;
-  background: transparent;
-  color: var(--text-secondary);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+.user-role-badge {
+  font-size: 0.625rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 2px 8px;
+  background: rgba(255, 255, 255, 0.25);
+  border-radius: var(--radius-pill);
+}
+
+.logout-button {
+  padding: 8px 16px;
+  background: rgba(255, 255, 255, 0.15);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: var(--radius-pill);
   cursor: pointer;
   font-size: 0.8125rem;
-  font-weight: 500;
-  transition: all 0.2s;
+  font-weight: 600;
+  transition: background 0.2s;
   white-space: nowrap;
 }
 
-.logout-button:hover,
-.settings-button:hover {
-  background: var(--bg);
-  color: var(--text);
-  border-color: var(--text-muted);
-}
-
-.settings-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
+.logout-button:hover {
+  background: rgba(255, 255, 255, 0.28);
 }
 
 .dashboard-content {
-  max-width: 1200px;
+  max-width: 1280px;
   width: 100%;
   margin: 0 auto;
   padding: 20px 16px;
-  padding-bottom: calc(20px + var(--safe-bottom));
+  padding-bottom: calc(24px + var(--safe-bottom));
   flex: 1;
 }
 
 .welcome-section {
-  background: var(--surface);
-  padding: 24px;
+  background: linear-gradient(135deg, var(--surface) 0%, var(--mbank-green-soft) 100%);
+  padding: 20px 22px;
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow);
-  margin-bottom: 20px;
-  border: 1px solid var(--border);
+  margin-bottom: 18px;
+  border: 1px solid var(--border-light);
+  border-left: 4px solid var(--primary);
 }
 
 .welcome-section h2 {
-  margin: 0 0 8px 0;
+  margin: 0 0 4px;
   color: var(--text);
-  font-size: 1.25rem;
-  font-weight: 600;
+  font-size: 1.125rem;
+  font-weight: 700;
   letter-spacing: -0.02em;
 }
 
 .welcome-section p {
   margin: 0;
   color: var(--text-secondary);
-  line-height: 1.6;
-  font-size: 0.9375rem;
+  font-size: 0.875rem;
+  line-height: 1.5;
 }
 
-.features-section {
-  margin-top: 20px;
-}
-
-.features-section h3 {
-  color: var(--text);
-  margin-bottom: 12px;
-  font-size: 1rem;
-  font-weight: 600;
-}
-
-.feature-card {
-  background: var(--surface);
-  padding: 20px;
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
-  margin-bottom: 10px;
-  border: 1px solid var(--border);
-  transition: box-shadow 0.2s;
-}
-
-.feature-card:hover {
-  box-shadow: var(--shadow-md);
-}
-
-.feature-card p {
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: 0.9375rem;
-}
-
-/* Tablet */
 @media (min-width: 640px) {
   .dashboard-header {
-    padding: 16px 24px;
-    padding-top: calc(16px + var(--safe-top));
+    padding: 0 24px;
   }
 
-  .dashboard-header h1 {
-    font-size: 1.25rem;
+  .header-titles h1 {
+    font-size: 1.1875rem;
   }
 
   .dashboard-content {
     padding: 24px 20px;
-    padding-bottom: calc(24px + var(--safe-bottom));
   }
 
   .welcome-section {
-    padding: 28px;
-    margin-bottom: 24px;
+    padding: 24px 26px;
+    margin-bottom: 22px;
   }
 
   .welcome-section h2 {
-    font-size: 1.5rem;
+    font-size: 1.25rem;
   }
 }
 
-/* Desktop */
 @media (min-width: 1024px) {
   .dashboard-header {
-    padding: 18px 32px;
-    padding-top: calc(18px + var(--safe-top));
-  }
-
-  .dashboard-header h1 {
-    font-size: 1.375rem;
+    padding: 0 32px;
   }
 
   .dashboard-content {
-    padding: 32px 24px;
-    padding-bottom: calc(32px + var(--safe-bottom));
-  }
-
-  .welcome-section {
-    padding: 32px;
-    margin-bottom: 28px;
+    padding: 28px 24px;
   }
 }

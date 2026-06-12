@@ -1,5 +1,6 @@
 import React from 'react'
 import { useAuth } from '../contexts/AuthContext'
+import DashboardHeader from './DashboardHeader'
 import MainTabs from './MainTabs'
 import './Dashboard.css'
 
@@ -8,20 +9,14 @@ const UserDashboard = () => {
 
   return (
     <div className="dashboard">
-      <header className="dashboard-header">
-        <h1>Панель пользователя</h1>
-        <div className="user-info">
-          <span>Пользователь: <strong>{user?.username}</strong></span>
-          <button onClick={logout} className="logout-button">Выйти</button>
-        </div>
-      </header>
+      <DashboardHeader title="Панель оператора" user={user} role="user" onLogout={logout} />
 
       <main className="dashboard-content">
         <div className="welcome-section">
-          <h2>ЛК и оборот</h2>
-          <p>Добавление, редактирование, смена статусов.</p>
+          <h2>Работа с ЛК</h2>
+          <p>Редактирование, статусы, запросы на разблок и Face ID.</p>
         </div>
-        <MainTabs canEdit showRefresh={false} showStatusSettings />
+        <MainTabs showRefresh showStatusSettings />
       </main>
     </div>
   )

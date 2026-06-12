@@ -1,5 +1,6 @@
 import React from 'react'
 import { useAuth } from '../contexts/AuthContext'
+import DashboardHeader from './DashboardHeader'
 import MainTabs from './MainTabs'
 import './Dashboard.css'
 
@@ -8,20 +9,14 @@ const BankerDashboard = () => {
 
   return (
     <div className="dashboard">
-      <header className="dashboard-header">
-        <h1>Панель банкира</h1>
-        <div className="user-info">
-          <span>Банкир: <strong>{user?.username}</strong></span>
-          <button onClick={logout} className="logout-button">Выйти</button>
-        </div>
-      </header>
+      <DashboardHeader title="Панель банкира" user={user} role="banker" onLogout={logout} />
 
       <main className="dashboard-content">
         <div className="welcome-section">
-          <h2>ЛК и оборот</h2>
-          <p>Обновление из JSON, поднятие с отдыха, управление статусами.</p>
+          <h2>Управление реквизитами</h2>
+          <p>Стоп, вайт, ответы операторам, поднятие с отдыха.</p>
         </div>
-        <MainTabs canEdit showRefresh showStatusSettings />
+        <MainTabs showRefresh showStatusSettings />
       </main>
     </div>
   )

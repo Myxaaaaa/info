@@ -3,7 +3,7 @@ import { useData } from '../contexts/DataContext'
 import DataTable from './DataTable'
 import './SoonToRestTab.css'
 
-const SoonToRestTab = ({ canEdit, showRefresh }) => {
+const SoonToRestTab = () => {
   const { rows, SOON_TO_REST_THRESHOLD } = useData()
 
   const soonToRestRows = rows.filter((r) => (r.turnover || 0) >= SOON_TO_REST_THRESHOLD)
@@ -15,7 +15,6 @@ const SoonToRestTab = ({ canEdit, showRefresh }) => {
         <p>ЛК с оборотом за квартал ≥ {new Intl.NumberFormat('ru-RU').format(SOON_TO_REST_THRESHOLD)}</p>
       </div>
       <DataTable
-        canEdit={canEdit}
         showRefresh={false}
         rowsOverride={soonToRestRows}
         blinkYellow

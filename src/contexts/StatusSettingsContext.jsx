@@ -1,4 +1,4 @@
-import React, { createContext, useState, useContext, useMemo } from 'react'
+import React, { createContext, useState, useContext } from 'react'
 
 const StatusSettingsContext = createContext(null)
 

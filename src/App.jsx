@@ -10,7 +10,7 @@ import BankerDashboard from './components/BankerDashboard'
 import AdminDashboard from './components/AdminDashboard'
 
 const AppContent = () => {
-  const { isAuthenticated, isAdmin, isBanker } = useAuth()
+  const { isAuthenticated, authReady, isAdmin, isBanker } = useAuth()
   const { rows } = useData()
   const { ensureStatusExists } = useStatusSettings()
 
@@ -19,6 +19,15 @@ const AppContent = () => {
       if (row.status) ensureStatusExists(row.status)
     })
   }, [rows, ensureStatusExists])
+
+  if (!authReady) {
+    return (
+      <div className="app-loading">
+        <div className="app-loading-spinner" />
+        <p>Загрузка...</p>
+      </div>
+    )
+  }
 
   if (!isAuthenticated) return <Login />
 

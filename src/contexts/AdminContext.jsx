@@ -1,38 +1,48 @@
-import React, { createContext, useState, useContext, useCallback } from 'react'
+import React, { createContext, useState, useContext, useCallback, useEffect, useRef } from 'react'
 
 const AdminContext = createContext(null)
 
-const LOGS_KEY = 'lk_activity_logs'
-const TELEGRAM_KEY = 'lk_telegram_webhook'
 const TELEGRAM_CHAT_KEY = 'lk_telegram_chat_id'
 const MAX_LOGS = 500
 
-const loadLogs = () => {
-  try {
-    const saved = localStorage.getItem(LOGS_KEY)
-    if (saved) return JSON.parse(saved)
-  } catch (_) {}
-  return []
-}
-
-const loadTelegramUrl = () => {
-  try {
-    return localStorage.getItem(TELEGRAM_KEY) || ''
-  } catch (_) {}
-  return ''
-}
-
-const loadTelegramChatId = () => {
-  try {
-    return localStorage.getItem(TELEGRAM_CHAT_KEY) || ''
-  } catch (_) {}
-  return ''
-}
-
 export const AdminProvider = ({ children }) => {
-  const [logs, setLogs] = useState(loadLogs)
-  const [telegramUrl, setTelegramUrlState] = useState(loadTelegramUrl)
-  const [telegramChatId, setTelegramChatIdState] = useState(loadTelegramChatId)
+  const [logs, setLogs] = useState([])
+  const [telegramChatId, setTelegramChatIdState] = useState('')
+  const [telegramEnabled, setTelegramEnabled] = useState(false)
+  const saveTimeoutRef = useRef(null)
+
+  useEffect(() => {
+    fetch('/api/settings')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.telegramChatId) {
+          setTelegramChatIdState(data.telegramChatId)
+          localStorage.setItem(TELEGRAM_CHAT_KEY, data.telegramChatId)
+        }
+        setTelegramEnabled(!!data.telegramEnabled)
+      })
+      .catch(() => {
+        const saved = localStorage.getItem(TELEGRAM_CHAT_KEY)
+        if (saved) setTelegramChatIdState(saved)
+      })
+
+    fetch('/api/logs')
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data.logs)) setLogs(data.logs)
+      })
+      .catch(() => {})
+
+    const t = setInterval(() => {
+      fetch('/api/logs')
+        .then((res) => res.json())
+        .then((data) => {
+          if (Array.isArray(data.logs)) setLogs(data.logs)
+        })
+        .catch(() => {})
+    }, 8000)
+    return () => clearInterval(t)
+  }, [])
 
   const addLog = useCallback((action, details = '', userId = '') => {
     const entry = {
@@ -42,21 +52,29 @@ export const AdminProvider = ({ children }) => {
       details,
       userId,
     }
-    setLogs((prev) => {
-      const next = [entry, ...prev].slice(0, MAX_LOGS)
-      localStorage.setItem(LOGS_KEY, JSON.stringify(next))
-      return next
-    })
-  }, [])
-
-  const setTelegramUrl = useCallback((url) => {
-    setTelegramUrlState(url || '')
-    localStorage.setItem(TELEGRAM_KEY, url || '')
+    setLogs((prev) => [entry, ...prev].slice(0, MAX_LOGS))
+    fetch('/api/logs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, details, userId }),
+    }).catch(() => {})
   }, [])
 
   const setTelegramChatId = useCallback((id) => {
-    setTelegramChatIdState(id || '')
-    localStorage.setItem(TELEGRAM_CHAT_KEY, id || '')
+    const val = id || ''
+    setTelegramChatIdState(val)
+    localStorage.setItem(TELEGRAM_CHAT_KEY, val)
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current)
+    saveTimeoutRef.current = setTimeout(() => {
+      fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ telegramChatId: val }),
+      })
+        .then((res) => res.json())
+        .then((data) => setTelegramEnabled(!!data.settings?.telegramEnabled))
+        .catch(() => {})
+    }, 500)
   }, [])
 
   const sendTelegramNotification = useCallback(
@@ -68,7 +86,7 @@ export const AdminProvider = ({ children }) => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ text: message, chatId: chatId.trim() }),
-        }).catch(() => {})
+        })
       } catch (_) {}
     },
     [telegramChatId]
@@ -77,10 +95,9 @@ export const AdminProvider = ({ children }) => {
   const value = {
     logs,
     addLog,
-    telegramUrl,
-    setTelegramUrl,
     telegramChatId,
     setTelegramChatId,
+    telegramEnabled,
     sendTelegramNotification,
   }
 

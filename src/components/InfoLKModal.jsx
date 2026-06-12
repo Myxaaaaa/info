@@ -6,19 +6,50 @@ import ReRaiseModal from './ReRaiseModal'
 import './InfoLKModal.css'
 
 const InfoLKModal = ({ lk, isOpen, onClose }) => {
-  const { getLKHistory, getBankerRequest, requestActivateFromRest, requestReRaiseFromRest, approveBankerRequest, rejectBankerRequest, getRaisedFromRestDate, isRestStatus } = useData()
-  const { user, isBanker } = useAuth()
+  const {
+    getLKHistory,
+    getBankerRequest,
+    getOperatorRequest,
+    requestActivateFromRest,
+    requestReRaiseFromRest,
+    approveBankerRequest,
+    rejectBankerRequest,
+    getRaisedFromRestDate,
+    isRestStatus,
+    setLKStop,
+    setLKWaitlist,
+    requestOperatorAction,
+    respondOperatorRequest,
+  } = useData()
+  const { user, canBanker, canOperator } = useAuth()
   const { getStatusStyle, getStatusLabel } = useStatusSettings()
   const [showRejectForm, setShowRejectForm] = useState(false)
   const [rejectReason, setRejectReason] = useState('')
   const [showReRaiseModal, setShowReRaiseModal] = useState(false)
+  const [opNeedsWaitlist, setOpNeedsWaitlist] = useState(false)
+  const [opNeedsStop, setOpNeedsStop] = useState(false)
+  const [opNeedsBlock, setOpNeedsBlock] = useState(false)
+  const [opNeedsUnblock, setOpNeedsUnblock] = useState(false)
+  const [opNeedsFace, setOpNeedsFace] = useState(false)
+  const [opStuckAmount, setOpStuckAmount] = useState('')
+  const [opNote, setOpNote] = useState('')
+  const [bankerRejectReason, setBankerRejectReason] = useState('')
+  const [bankerWaitlistYes, setBankerWaitlistYes] = useState(true)
+  const [bankerStopYes, setBankerStopYes] = useState(true)
+  const [bankerBlockYes, setBankerBlockYes] = useState(true)
+  const [bankerUnblockYes, setBankerUnblockYes] = useState(true)
+  const [bankerFaceYes, setBankerFaceYes] = useState(true)
+  const [loading, setLoading] = useState(false)
 
   if (!isOpen || !lk) return null
 
   const history = getLKHistory(lk.id)
   const request = getBankerRequest(lk.id)
+  const opRequest = getOperatorRequest(lk.id)
   const raisedDate = getRaisedFromRestDate(lk.id)
-  const canRequestRest = isBanker && isRestStatus(lk.status)
+  const canRequestRest = canBanker && isRestStatus(lk.status)
+  const isBlocked = (lk.status || '').toLowerCase() === 'блок'
+  const showOperatorForm = canOperator && !canBanker && (!opRequest || opRequest.status !== 'pending')
 
   const formatDate = (dateString) => {
     const date = new Date(dateString)
@@ -27,25 +58,25 @@ const InfoLKModal = ({ lk, isOpen, onClose }) => {
       month: '2-digit',
       year: 'numeric',
       hour: '2-digit',
-      minute: '2-digit'
+      minute: '2-digit',
     })
   }
+
+  const bankerName = user?.username || 'banker'
+  const operatorName = user?.username || 'operator'
 
   const handleRequestActivate = () => {
     if (raisedDate) {
       setShowReRaiseModal(true)
       return
     }
-    const result = requestActivateFromRest(lk.id, user?.username || 'banker')
-    if (result.success) {
-      onClose()
-    } else if (result.error) {
-      alert(result.error)
-    }
+    const result = requestActivateFromRest(lk.id, bankerName)
+    if (result.success) onClose()
+    else if (result.error) alert(result.error)
   }
 
   const handleReRaiseRequest = () => {
-    const result = requestReRaiseFromRest(lk.id, user?.username || 'banker')
+    const result = requestReRaiseFromRest(lk.id, bankerName)
     setShowReRaiseModal(false)
     if (result.success) {
       alert('Запрос отправлен. Админ одобрит — пользователь получит уведомление.')
@@ -69,8 +100,70 @@ const InfoLKModal = ({ lk, isOpen, onClose }) => {
     rejectBankerRequest(lk.id, rejectReason)
     setShowRejectForm(false)
     setRejectReason('')
-    alert('Запрос отклонен, банкир получит уведомление')
     onClose()
+  }
+
+  const handleToggleStop = async () => {
+    setLoading(true)
+    const result = await setLKStop(lk.id, !lk.onStop, bankerName)
+    setLoading(false)
+    if (!result.success) alert(result.error)
+  }
+
+  const handleToggleWaitlist = async () => {
+    setLoading(true)
+    const result = await setLKWaitlist(lk.id, !lk.inWaitlist, bankerName)
+    setLoading(false)
+    if (!result.success) alert(result.error)
+  }
+
+  const handleOperatorRequest = async () => {
+    setLoading(true)
+    const result = await requestOperatorAction(lk.id, operatorName, {
+      needsWaitlist: opNeedsWaitlist,
+      needsStop: opNeedsStop,
+      needsBlock: opNeedsBlock,
+      needsUnblock: opNeedsUnblock,
+      needsFace: opNeedsFace,
+      stuckAmount: opStuckAmount,
+      note: opNote,
+    })
+    setLoading(false)
+    if (result.success) {
+      alert('Запрос отправлен банкиру')
+      onClose()
+    } else {
+      alert(result.error || 'Ошибка')
+    }
+  }
+
+  const handleBankerRespond = async () => {
+    const denied =
+      (opRequest?.needsWaitlist && !bankerWaitlistYes) ||
+      (opRequest?.needsStop && !bankerStopYes) ||
+      (opRequest?.needsBlock && !bankerBlockYes) ||
+      (opRequest?.needsUnblock && !bankerUnblockYes) ||
+      (opRequest?.needsFace && !bankerFaceYes)
+    if (denied && !bankerRejectReason.trim()) {
+      alert('Укажите причину отказа')
+      return
+    }
+    setLoading(true)
+    const result = await respondOperatorRequest(lk.id, bankerName, {
+      waitlistApproved: bankerWaitlistYes,
+      stopApproved: bankerStopYes,
+      blockApproved: bankerBlockYes,
+      unblockApproved: bankerUnblockYes,
+      faceApproved: bankerFaceYes,
+      rejectionReason: bankerRejectReason,
+    })
+    setLoading(false)
+    if (result.success) {
+      alert('Ответ отправлен')
+      onClose()
+    } else {
+      alert(result.error || 'Ошибка')
+    }
   }
 
   return (
@@ -79,11 +172,7 @@ const InfoLKModal = ({ lk, isOpen, onClose }) => {
         <div className="modal-header">
           <h2>
             Информация о ЛК
-            {lk.name && (
-              <span className="modal-subtitle">
-                &nbsp;· {lk.name}
-              </span>
-            )}
+            {lk.name && <span className="modal-subtitle">&nbsp;· {lk.name}</span>}
           </h2>
           <button className="modal-close" onClick={onClose}>×</button>
         </div>
@@ -124,6 +213,16 @@ const InfoLKModal = ({ lk, isOpen, onClose }) => {
                   {lk.turnover ? new Intl.NumberFormat('ru-RU').format(lk.turnover) : '—'}
                 </span>
               </div>
+              {(lk.onStop || lk.inWaitlist) && (
+                <div className="info-item full-width">
+                  <span className="info-label">Метки:</span>
+                  <span className="info-value">
+                    {lk.onStop && <span className="lk-flag lk-flag-stop">🛑 СТОП</span>}
+                    {lk.inWaitlist && <span className="lk-flag lk-flag-wait">📋 В ВАЙТЕ</span>}
+                    {!lk.inWaitlist && canBanker && <span className="lk-flag lk-flag-nowait">❌ Не в вайте</span>}
+                  </span>
+                </div>
+              )}
               {lk.extra && (
                 <div className="info-item full-width">
                   <span className="info-label">Примечания:</span>
@@ -133,23 +232,192 @@ const InfoLKModal = ({ lk, isOpen, onClose }) => {
             </div>
           </div>
 
-          {/* Запрос банкира */}
+          {/* Банкир: стоп и вайт */}
+          {canBanker && (
+            <div className="info-section banker-actions-section">
+              <h3>Действия банкира</h3>
+              <div className="banker-toggle-row">
+                <button
+                  type="button"
+                  className={`btn-banker-toggle ${lk.onStop ? 'active-stop' : ''}`}
+                  onClick={handleToggleStop}
+                  disabled={loading}
+                >
+                  {lk.onStop ? '🛑 На стопе — снять' : '🛑 Поставить на стоп'}
+                </button>
+                <button
+                  type="button"
+                  className={`btn-banker-toggle ${lk.inWaitlist ? 'active-wait' : ''}`}
+                  onClick={handleToggleWaitlist}
+                  disabled={loading}
+                >
+                  {lk.inWaitlist ? '📋 В вайте — убрать' : '📋 Отметить в вайте'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Оператор: запрос банкиру */}
+          {showOperatorForm && (
+            <div className="info-section">
+              <h3>Запрос банкиру</h3>
+              <p className="section-hint">Выберите действие — банкир подтвердит в Telegram</p>
+              <div className="operator-checkboxes">
+                {!lk.inWaitlist && (
+                  <label>
+                    <input type="checkbox" checked={opNeedsWaitlist} onChange={(e) => setOpNeedsWaitlist(e.target.checked)} />
+                    📋 Поставить в вайт
+                  </label>
+                )}
+                {!lk.onStop && (
+                  <label>
+                    <input type="checkbox" checked={opNeedsStop} onChange={(e) => setOpNeedsStop(e.target.checked)} />
+                    🛑 Поставить на стоп
+                  </label>
+                )}
+                {!isBlocked && (
+                  <label>
+                    <input type="checkbox" checked={opNeedsBlock} onChange={(e) => setOpNeedsBlock(e.target.checked)} />
+                    🔒 Заблокировать
+                  </label>
+                )}
+                {isBlocked && (
+                  <label>
+                    <input type="checkbox" checked={opNeedsUnblock} onChange={(e) => setOpNeedsUnblock(e.target.checked)} />
+                    🔓 Разблокировать
+                  </label>
+                )}
+                <label>
+                  <input type="checkbox" checked={opNeedsFace} onChange={(e) => setOpNeedsFace(e.target.checked)} />
+                  👤 Снять Face ID
+                </label>
+              </div>
+              <div className="form-group">
+                <label>Сумма застряла</label>
+                <input
+                  type="text"
+                  value={opStuckAmount}
+                  onChange={(e) => setOpStuckAmount(e.target.value)}
+                  placeholder="Например: 15000"
+                />
+              </div>
+              <div className="form-group">
+                <label>Комментарий</label>
+                <textarea
+                  value={opNote}
+                  onChange={(e) => setOpNote(e.target.value)}
+                  rows={2}
+                  placeholder="Доп. информация..."
+                />
+              </div>
+              <button className="btn-banker-request" onClick={handleOperatorRequest} disabled={loading}>
+                Отправить запрос банкиру
+              </button>
+            </div>
+          )}
+
+          {/* Банкир: ответ на запрос оператора */}
+          {canBanker && opRequest?.status === 'pending' && (
+            <div className="info-section operator-response-section">
+              <h3>Запрос оператора</h3>
+              <p className="request-message">
+                Оператор <strong>{opRequest.operator}</strong> запросил:
+                {opRequest.needsWaitlist && ' 📋 Вайт'}
+                {opRequest.needsStop && ' 🛑 Стоп'}
+                {opRequest.needsBlock && ' 🔒 Блок'}
+                {opRequest.needsUnblock && ' 🔓 Разблок'}
+                {opRequest.needsFace && ' 👤 Face ID'}
+              </p>
+              {opRequest.stuckAmount && <p>💰 Застряло: <strong>{opRequest.stuckAmount}</strong></p>}
+              {opRequest.note && <p>📝 {opRequest.note}</p>}
+              <p className="request-date">{formatDate(opRequest.date)}</p>
+
+              {opRequest.needsWaitlist && (
+                <div className="banker-response-row">
+                  <span>В вайт:</span>
+                  <label><input type="radio" checked={bankerWaitlistYes} onChange={() => setBankerWaitlistYes(true)} /> Да</label>
+                  <label><input type="radio" checked={!bankerWaitlistYes} onChange={() => setBankerWaitlistYes(false)} /> Нет</label>
+                </div>
+              )}
+              {opRequest.needsStop && (
+                <div className="banker-response-row">
+                  <span>На стоп:</span>
+                  <label><input type="radio" checked={bankerStopYes} onChange={() => setBankerStopYes(true)} /> Да</label>
+                  <label><input type="radio" checked={!bankerStopYes} onChange={() => setBankerStopYes(false)} /> Нет</label>
+                </div>
+              )}
+              {opRequest.needsBlock && (
+                <div className="banker-response-row">
+                  <span>Блок:</span>
+                  <label><input type="radio" checked={bankerBlockYes} onChange={() => setBankerBlockYes(true)} /> Да</label>
+                  <label><input type="radio" checked={!bankerBlockYes} onChange={() => setBankerBlockYes(false)} /> Нет</label>
+                </div>
+              )}
+              {opRequest.needsUnblock && (
+                <div className="banker-response-row">
+                  <span>Разблок:</span>
+                  <label><input type="radio" checked={bankerUnblockYes} onChange={() => setBankerUnblockYes(true)} /> Да</label>
+                  <label><input type="radio" checked={!bankerUnblockYes} onChange={() => setBankerUnblockYes(false)} /> Нет</label>
+                </div>
+              )}
+              {opRequest.needsFace && (
+                <div className="banker-response-row">
+                  <span>Face ID:</span>
+                  <label><input type="radio" checked={bankerFaceYes} onChange={() => setBankerFaceYes(true)} /> Снять</label>
+                  <label><input type="radio" checked={!bankerFaceYes} onChange={() => setBankerFaceYes(false)} /> Нет</label>
+                </div>
+              )}
+              <div className="form-group">
+                <label>Причина отказа (если отказ)</label>
+                <textarea
+                  value={bankerRejectReason}
+                  onChange={(e) => setBankerRejectReason(e.target.value)}
+                  rows={2}
+                  placeholder="Укажите причину..."
+                />
+              </div>
+              <button className="btn-approve" onClick={handleBankerRespond} disabled={loading}>
+                Отправить ответ
+              </button>
+            </div>
+          )}
+
+          {/* Статус запроса оператора */}
+          {opRequest?.status === 'resolved' && (
+            <div className="info-section">
+              <h3>Запрос оператора — решён</h3>
+              <p>Банкир: {opRequest.banker || '—'}</p>
+              {opRequest.needsWaitlist && <p>Вайт: {opRequest.waitlistApproved ? '✅ Да' : '❌ Нет'}</p>}
+              {opRequest.needsStop && <p>Стоп: {opRequest.stopApproved ? '✅ Да' : '❌ Нет'}</p>}
+              {opRequest.needsBlock && <p>Блок: {opRequest.blockApproved ? '✅ Да' : '❌ Нет'}</p>}
+              {opRequest.needsUnblock && <p>Разблок: {opRequest.unblockApproved ? '✅ Да' : '❌ Нет'}</p>}
+              {opRequest.needsFace && <p>Face ID: {opRequest.faceApproved ? '✅ Снят' : '❌ Нет'}</p>}
+              {opRequest.rejectionReason && <p>Причина: {opRequest.rejectionReason}</p>}
+              <p className="request-date">{formatDate(opRequest.resolvedDate)}</p>
+            </div>
+          )}
+
+          {opRequest?.status === 'pending' && canOperator && !canBanker && (
+            <div className="info-section">
+              <div className="banker-request-info">
+                <p>⏳ Ожидает ответа банкира</p>
+              </div>
+            </div>
+          )}
+
+          {/* Запрос банкира (поднять с отдыха) */}
           {request && (
             <div className="info-section">
               <h3>Запрос банкира</h3>
-              {request.status === 'pending' && !isBanker && (
+              {request.status === 'pending' && canOperator && (
                 <div className="banker-request-pending">
                   <p className="request-message">
                     Банкир <strong>{request.banker}</strong> запросил поднять реквизит с отдыха
                   </p>
                   <p className="request-date">Дата запроса: {formatDate(request.date)}</p>
                   <div className="request-actions">
-                    <button className="btn-approve" onClick={handleApprove}>
-                      Подтвердить (статус → актив)
-                    </button>
-                    <button className="btn-reject" onClick={() => setShowRejectForm(true)}>
-                      Отклонить
-                    </button>
+                    <button className="btn-approve" onClick={handleApprove}>Подтвердить (статус → актив)</button>
+                    <button className="btn-reject" onClick={() => setShowRejectForm(true)}>Отклонить</button>
                   </div>
                   {showRejectForm && (
                     <div className="reject-form">
@@ -161,9 +429,7 @@ const InfoLKModal = ({ lk, isOpen, onClose }) => {
                       />
                       <div className="reject-form-actions">
                         <button onClick={() => setShowRejectForm(false)}>Отмена</button>
-                        <button onClick={handleReject} className="btn-confirm-reject">
-                          Отправить
-                        </button>
+                        <button onClick={handleReject} className="btn-confirm-reject">Отправить</button>
                       </div>
                     </div>
                   )}
@@ -178,24 +444,17 @@ const InfoLKModal = ({ lk, isOpen, onClose }) => {
               {request.status === 'rejected' && (
                 <div className="banker-request-rejected">
                   <p>✗ Запрос отклонен</p>
-                  <p className="request-date">Дата: {formatDate(request.rejectedDate)}</p>
-                  {request.rejectionReason && (
-                    <div className="rejection-reason">
-                      <strong>Причина отклонения:</strong> {request.rejectionReason}
-                    </div>
-                  )}
+                  {request.rejectionReason && <p><strong>Причина:</strong> {request.rejectionReason}</p>}
                 </div>
               )}
-              {isBanker && request.status === 'pending' && (
+              {canBanker && !canOperator && request.status === 'pending' && (
                 <div className="banker-request-info">
-                  <p>⏳ Ожидает подтверждения пользователя</p>
-                  <p className="request-date">Дата запроса: {formatDate(request.date)}</p>
+                  <p>⏳ Ожидает подтверждения оператора</p>
                 </div>
               )}
             </div>
           )}
 
-          {/* Кнопка банкира */}
           {canRequestRest && !request && (
             <div className="info-section">
               <button className="btn-banker-request" onClick={handleRequestActivate}>
@@ -203,16 +462,7 @@ const InfoLKModal = ({ lk, isOpen, onClose }) => {
               </button>
             </div>
           )}
-          {canRequestRest && request?.status === 're_raise_pending' && (
-            <div className="info-section">
-              <div className="banker-request-info">
-                <p>⏳ Ожидает одобрения админа для повторного запроса</p>
-                <p className="request-date">Ранее поднимали: {formatDate(request.previousRaisedDate)}</p>
-              </div>
-            </div>
-          )}
 
-          {/* История изменений статусов */}
           {history.length > 0 && (
             <div className="info-section">
               <h3>История изменений статусов</h3>
@@ -220,21 +470,12 @@ const InfoLKModal = ({ lk, isOpen, onClose }) => {
                 {history.map((entry, idx) => (
                   <div key={idx} className="history-item">
                     <div className="history-status-change">
-                      <span className="history-from" style={getStatusStyle(entry.from)}>
-                        {getStatusLabel(entry.from) || '—'}
-                      </span>
+                      <span className="history-from" style={getStatusStyle(entry.from)}>{getStatusLabel(entry.from) || '—'}</span>
                       <span className="history-arrow">→</span>
-                      <span className="history-to" style={getStatusStyle(entry.to)}>
-                        {getStatusLabel(entry.to)}
-                      </span>
+                      <span className="history-to" style={getStatusStyle(entry.to)}>{getStatusLabel(entry.to)}</span>
                     </div>
                     <div className="history-meta">
                       <span className="history-date">{formatDate(entry.date)}</span>
-                      <span className="history-author">
-                        {entry.changedBy === 'banker' ? 'Банкир' : 
-                         entry.changedBy === 'banker_approved' ? 'Банкир (подтверждено)' :
-                         'Пользователь'}
-                      </span>
                     </div>
                   </div>
                 ))}

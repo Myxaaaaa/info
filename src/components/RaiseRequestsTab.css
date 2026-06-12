@@ -4,11 +4,25 @@
 
 .raise-requests-header {
   margin-bottom: 16px;
+  padding: 18px 20px;
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-light);
+  border-left: 4px solid var(--primary);
+}
+
+.raise-subheading {
+  margin: 1.25rem 0 0.5rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-secondary, #5a6b5f);
 }
 
 .raise-requests-header h3 {
-  margin: 0 0 4px 0;
-  font-size: 1.125rem;
+  margin: 0 0 4px;
+  font-size: 1.0625rem;
+  font-weight: 700;
+  color: var(--text);
 }
 
 .raise-requests-header p {
@@ -18,11 +32,13 @@
 }
 
 .raise-requests-empty {
-  padding: 32px;
+  padding: 48px 24px;
   text-align: center;
-  color: var(--text-secondary);
-  background: var(--bg);
+  color: var(--text-muted);
+  background: var(--surface);
   border-radius: var(--radius-lg);
+  border: 1px dashed var(--border);
+  font-size: 0.9375rem;
 }
 
 .raise-requests-list {
@@ -37,11 +53,18 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 14px 16px;
+  padding: 16px 18px;
   background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
   margin-bottom: 10px;
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow 0.2s, border-color 0.2s;
+}
+
+.raise-request-item:hover {
+  border-color: rgba(0, 185, 86, 0.3);
+  box-shadow: var(--shadow);
 }
 
 .raise-request-main {
@@ -52,7 +75,8 @@
 }
 
 .raise-request-lk {
-  font-weight: 600;
+  font-weight: 700;
+  color: var(--text);
 }
 
 .raise-request-banker {
@@ -66,25 +90,30 @@
 }
 
 .raise-request-badge {
-  font-size: 0.75rem;
-  padding: 2px 8px;
+  font-size: 0.6875rem;
+  padding: 4px 10px;
   background: var(--warning-bg);
-  color: var(--warning);
-  border-radius: var(--radius-sm);
-  font-weight: 600;
+  color: #E65100;
+  border-radius: var(--radius-pill);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
 
 .raise-request-btn {
-  padding: 8px 16px;
+  padding: 10px 20px;
   font-size: 0.875rem;
   background: var(--primary);
   color: white;
   border: none;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-pill);
   cursor: pointer;
-  font-weight: 500;
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(0, 185, 86, 0.25);
+  transition: all 0.2s;
 }
 
 .raise-request-btn:hover {
   background: var(--primary-hover);
+  transform: translateY(-1px);
 }

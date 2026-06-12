@@ -4,11 +4,18 @@
 
 .soon-to-rest-header {
   margin-bottom: 16px;
+  padding: 18px 20px;
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-light);
+  border-left: 4px solid var(--warning);
 }
 
 .soon-to-rest-header h3 {
-  margin: 0 0 4px 0;
-  font-size: 1.125rem;
+  margin: 0 0 4px;
+  font-size: 1.0625rem;
+  font-weight: 700;
+  color: var(--text);
 }
 
 .soon-to-rest-header p {

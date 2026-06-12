@@ -1,13 +1,15 @@
-import React, { createContext, useState, useContext, useMemo, useEffect, useRef } from 'react'
-import lkRegistryData from '../data/lk_registry.json'
+import React, { createContext, useState, useContext, useMemo, useEffect, useRef, useCallback } from 'react'
+import { INITIAL_DATA, DATA_VERSION } from '../data/tableData.js'
 import { useAdmin } from './AdminContext'
 
 const DataContext = createContext(null)
 
 const STORAGE_KEY = 'lk_table_data'
+const VERSION_KEY = 'lk_data_version'
 const HISTORY_KEY = 'lk_status_history'
 const REQUESTS_KEY = 'lk_banker_requests'
 const RAISED_KEY = 'lk_raised_from_rest'
+const OPERATOR_REQUESTS_KEY = 'lk_operator_requests'
 const SOON_TO_REST_THRESHOLD = 4_000_000
 
 const parseTurnover = (v) => {
@@ -16,107 +18,32 @@ const parseTurnover = (v) => {
   return isNaN(n) ? 0 : n
 }
 
-// Преобразование данных из JSON в формат таблицы
-const transformData = (jsonData) => {
-  if (!Array.isArray(jsonData)) return []
-  
-  // Список менеджеров (от кого)
-  const managers = ['махабат', 'бэн', 'Бэн', 'mayson', 'Mayson', 'эрл', 'Эрл', 'алекс', 'адам', 
-    'адам-ади', 'аман', 'Аман', 'узб', 'Uzb', 'UZB', 'док', 'изи', 'мырза', 'майкл', 'баха',
-    'кана', 'эдиль', 'мэйсон', 'Умар', 'умар', 'мелис', 'Бэн', 'oss uzb', 'Oss uzb']
-  
-  // Маппинг статусов из JSON на фиксированные
-  const statusMapping = {
-    'на отдыхе': 'отдых',
-    'в работе': 'актив',
-    'заблокирован': 'блок',
-    'Вылет': 'вылет',
-    'Заява': 'заява',
-    'у дропа': 'вернули дропу',
-    'потерялся': 'потеряли',
-    'запас': 'актив',
-    'Запас': 'актив'
-  }
-  
-  // Список статусов для проверки
-  const statusKeywords = ['актив', 'отдых', 'блок', 'вылет', 'заява', 'вернули дропу', 'потеряли',
-    'заблокирован', 'на отдыхе', 'в работе', 'Вылет', 'Заява', 'потерялся', 'у дропа', 'запас', 'Запас']
-  
-  return jsonData.map((item, index) => {
-    // Обработка телефона - убираем +996 если есть
-    let phone = item.phone || ''
-    if (phone && phone.startsWith('+996')) {
-      phone = phone.replace('+996', '').trim()
-    }
-    
-    // Определяем имя - если в full_name номер карты, берем из card или оставляем пустым
-    let name = item.full_name || ''
-    let card = item.card || ''
-    let manager = item.manager || ''
-    
-    // Проверяем, является ли full_name номером карты (только цифры и пробелы)
-    const isCardNumber = /^[\d\s]+$/.test(name.trim())
-    
-    if (isCardNumber) {
-      // Если full_name - это номер карты, то:
-      // card = full_name (номер карты)
-      // name = пустое или берем из другого места
-      card = name.trim()
-      name = '' // Имя не указано, оставляем пустым
-    }
-    
-    // Проверяем поле card - если там менеджер, переносим в manager
-    const cardLower = (card || '').toLowerCase().trim()
-    if (managers.some(m => cardLower === m.toLowerCase())) {
-      manager = card
-      card = ''
-    }
-    
-    // Если в card статус - обрабатываем
-    if (statusKeywords.some(keyword => cardLower === keyword.toLowerCase())) {
-      // Если статус пустой, переносим из card
-      if (!item.status) {
-        item.status = card
-      }
-      card = ''
-    }
-    
-    // Если card пустой, но в full_name есть номер карты - используем его
-    if (!card && !isCardNumber && /^[\d\s]+$/.test(name.trim())) {
-      card = name.trim()
-      name = ''
-    }
-    
-    // Обработка статуса - маппинг и замена "запас" на "актив"
-    let status = item.status || ''
-    if (status) {
-      // Применяем маппинг статусов
-      status = statusMapping[status] || status
-      // Заменяем "запас" на "актив"
-      if (status.toLowerCase() === 'запас' || status === 'Запас') {
-        status = 'актив'
-      }
-    }
-    
-    // Формируем примечания
-    let extra = ''
-    if (item.remaining_funds) {
-      extra = `Остаток: ${item.remaining_funds}`
-    }
-    
-    return {
-      id: parseInt(item.id) || index + 1,
-      name: name,
-      phone: phone,
-      card: card,
-      status: status,
-      manager: manager,
-      extra: extra,
-      bank: item.bank || '',
-      turnover: 0,
-    }
-  })
-  // Импортируем ВСЕ записи, даже если некоторые поля пустые
+const normalizeRow = (item, index) => ({
+  id: item.id || index + 1,
+  name: item.name || '',
+  phone: item.phone || '',
+  card: item.card || '',
+  status: item.status || '',
+  manager: item.manager || '',
+  extra: item.extra || '',
+  bank: item.bank || 'Мбанк',
+  turnover: item.turnover || 0,
+  onStop: !!item.onStop,
+  inWaitlist: !!item.inWaitlist,
+})
+
+const transformData = (sourceData) => {
+  if (!Array.isArray(sourceData)) return []
+  return sourceData.map((item, index) => normalizeRow(item, index))
+}
+
+const resetLocalCaches = () => {
+  localStorage.removeItem(STORAGE_KEY)
+  localStorage.removeItem(HISTORY_KEY)
+  localStorage.removeItem(REQUESTS_KEY)
+  localStorage.removeItem(RAISED_KEY)
+  localStorage.removeItem(OPERATOR_REQUESTS_KEY)
+  localStorage.setItem(VERSION_KEY, String(DATA_VERSION))
 }
 
 // Автоматическое извлечение статусов из данных
@@ -131,31 +58,30 @@ const extractStatusesFromData = (data) => {
 }
 
 const loadData = () => {
-  // Всегда загружаем из JSON файла при первом запуске
-  // transformData уже обрабатывает все данные правильно
-  const transformed = transformData(lkRegistryData)
-  
-  // Если есть сохраненные изменения в localStorage, применяем их к данным из JSON
+  const transformed = transformData(INITIAL_DATA)
+  const savedVersion = localStorage.getItem(VERSION_KEY)
+
+  if (String(DATA_VERSION) !== savedVersion) {
+    resetLocalCaches()
+    return transformed
+  }
+
   try {
     const saved = localStorage.getItem(STORAGE_KEY)
     if (saved) {
       const savedData = JSON.parse(saved)
       if (Array.isArray(savedData) && savedData.length > 0) {
-        // Создаем карту сохраненных изменений по ID
-        const savedMap = new Map()
-        savedData.forEach(item => {
-          if (item.id) savedMap.set(item.id, item)
-        })
-        
-        // Применяем сохраненные изменения к данным из JSON
-        return transformed.map(item => {
-          const saved = savedMap.get(item.id)
-          return saved ? { ...item, ...saved } : item
+        const savedMap = new Map(savedData.map((item) => [item.id, item]))
+        return transformed.map((item) => {
+          const savedRow = savedMap.get(item.id)
+          return savedRow ? { ...item, ...savedRow } : item
         })
       }
     }
-  } catch (_) {}
-  
+  } catch {
+    resetLocalCaches()
+  }
+
   return transformed
 }
 
@@ -177,9 +103,42 @@ export const DataProvider = ({ children }) => {
     return Array.from(allStatuses).sort()
   }, [rows])
 
+  const hydratedRef = useRef(false)
+  const lastServerUpdatedAt = useRef(0)
+  const pushTimerRef = useRef(null)
+  const hasUnsyncedChangesRef = useRef(false)
+  const stateSnapshotRef = useRef({})
+
+  const scheduleServerPush = useCallback(() => {
+    if (!hydratedRef.current) return
+    hasUnsyncedChangesRef.current = true
+    if (pushTimerRef.current) clearTimeout(pushTimerRef.current)
+    pushTimerRef.current = setTimeout(() => {
+      const snap = stateSnapshotRef.current
+      fetch('/api/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          rows: snap.rows,
+          bankerRequests: snap.bankerRequests,
+          raisedFromRest: snap.raisedFromRest,
+          operatorRequests: snap.operatorRequests,
+          statusHistory: snap.statusHistory,
+        }),
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          hasUnsyncedChangesRef.current = false
+          if (data.updatedAt) lastServerUpdatedAt.current = data.updatedAt
+        })
+        .catch(() => {})
+    }, 400)
+  }, [])
+
   const saveData = (newRows) => {
     setRows(newRows)
     localStorage.setItem(STORAGE_KEY, JSON.stringify(newRows))
+    scheduleServerPush()
   }
 
   // Загрузка истории изменений статусов
@@ -216,22 +175,71 @@ export const DataProvider = ({ children }) => {
   }
   const [raisedFromRest, setRaisedFromRest] = useState(loadRaised)
 
-  const saveRaised = (data) => {
+  const loadOperatorRequests = () => {
+    try {
+      const saved = localStorage.getItem(OPERATOR_REQUESTS_KEY)
+      if (saved) return JSON.parse(saved)
+    } catch (_) {}
+    return {}
+  }
+  const [operatorRequests, setOperatorRequests] = useState(loadOperatorRequests)
+
+  const applyOperatorRequests = (data) => {
+    setOperatorRequests(data)
+    localStorage.setItem(OPERATOR_REQUESTS_KEY, JSON.stringify(data))
+  }
+
+  const saveOperatorRequests = (data) => {
+    applyOperatorRequests(data)
+    scheduleServerPush()
+  }
+
+  const applyRaised = (data) => {
     setRaisedFromRest(data)
     localStorage.setItem(RAISED_KEY, JSON.stringify(data))
   }
 
-  // Сохранение истории
-  const saveHistory = (newHistory) => {
+  const saveRaised = (data) => {
+    applyRaised(data)
+    scheduleServerPush()
+  }
+
+  const applyHistory = (newHistory) => {
     setStatusHistory(newHistory)
     localStorage.setItem(HISTORY_KEY, JSON.stringify(newHistory))
   }
 
-  // Сохранение запросов
-  const saveRequests = (newRequests) => {
+  const saveHistory = (newHistory) => {
+    applyHistory(newHistory)
+    scheduleServerPush()
+  }
+
+  const applyRequests = (newRequests) => {
     setBankerRequests(newRequests)
     localStorage.setItem(REQUESTS_KEY, JSON.stringify(newRequests))
   }
+
+  const saveRequests = (newRequests) => {
+    applyRequests(newRequests)
+    scheduleServerPush()
+  }
+
+  const applyRows = (newRows) => {
+    setRows(newRows)
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(newRows))
+  }
+
+  const applyServerState = useCallback((data) => {
+    if (hasUnsyncedChangesRef.current) return
+    const serverTs = data.updatedAt || 0
+    if (serverTs && serverTs <= lastServerUpdatedAt.current) return
+    lastServerUpdatedAt.current = serverTs || Date.now()
+    if (data.rows?.length) applyRows(data.rows)
+    if (data.bankerRequests) applyRequests(data.bankerRequests)
+    if (data.raisedFromRest) applyRaised(data.raisedFromRest)
+    if (data.operatorRequests) applyOperatorRequests(data.operatorRequests)
+    if (data.statusHistory) applyHistory(data.statusHistory)
+  }, [])
 
   const updateStatus = (id, newStatus, changedBy = 'user') => {
     const updated = rows.map((r) => {
@@ -355,6 +363,8 @@ export const DataProvider = ({ children }) => {
       bank: cleanedData.bank || '',
       extra: cleanedData.extra || '',
       turnover: parseTurnover(cleanedData.turnover) || 0,
+      onStop: false,
+      inWaitlist: false,
     }
     saveData([...rows, newLK])
     addLog('Добавление ЛК', `#${newLK.id}`, '')
@@ -509,9 +519,184 @@ export const DataProvider = ({ children }) => {
     return bankerRequests[id] || null
   }
 
+  const getOperatorRequest = (id) => operatorRequests[id] || null
+
+  const setLKStop = async (id, onStop, bankerName) => {
+    try {
+      const res = await fetch(`/api/lk/${id}/stop`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ onStop, banker: bankerName }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.success) return { success: false, error: data.error || 'Ошибка' }
+      const updated = rows.map((r) => (r.id === id ? { ...r, onStop: !!onStop } : r))
+      saveData(updated)
+      addLog(onStop ? 'Стоп реквизит' : 'Снят со стопа', `#${id}`, bankerName)
+      return { success: true }
+    } catch {
+      return { success: false, error: 'Сервер недоступен' }
+    }
+  }
+
+  const setLKWaitlist = async (id, inWaitlist, bankerName) => {
+    try {
+      const res = await fetch(`/api/lk/${id}/waitlist`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inWaitlist, banker: bankerName }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.success) return { success: false, error: data.error || 'Ошибка' }
+      const updated = rows.map((r) => (r.id === id ? { ...r, inWaitlist: !!inWaitlist } : r))
+      saveData(updated)
+      addLog(inWaitlist ? 'В вайте' : 'Не в вайте', `#${id}`, bankerName)
+      return { success: true }
+    } catch {
+      return { success: false, error: 'Сервер недоступен' }
+    }
+  }
+
+  const requestOperatorAction = async (id, operatorName, payload) => {
+    const {
+      needsWaitlist,
+      needsStop,
+      needsBlock,
+      needsUnblock,
+      needsFace,
+      stuckAmount,
+      note,
+    } = payload || {}
+    const hasNeed = needsWaitlist || needsStop || needsBlock || needsUnblock || needsFace
+    if (!hasNeed) {
+      return { success: false, error: 'Выберите хотя бы один тип запроса' }
+    }
+    const existing = operatorRequests[id]
+    if (existing?.status === 'pending') {
+      return { success: false, error: 'Запрос уже отправлен' }
+    }
+    try {
+      const res = await fetch(`/api/lk/${id}/operator-request`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          operator: operatorName,
+          needsWaitlist,
+          needsStop,
+          needsBlock,
+          needsUnblock,
+          needsFace,
+          stuckAmount,
+          note,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.success) return { success: false, error: data.error || 'Ошибка' }
+      const newReq = {
+        operator: operatorName,
+        date: new Date().toISOString(),
+        status: 'pending',
+        needsWaitlist: !!needsWaitlist,
+        needsStop: !!needsStop,
+        needsBlock: !!needsBlock,
+        needsUnblock: !!needsUnblock,
+        needsFace: !!needsFace,
+        stuckAmount: stuckAmount || '',
+        note: note || '',
+        waitlistApproved: null,
+        stopApproved: null,
+        blockApproved: null,
+        unblockApproved: null,
+        faceApproved: null,
+        rejectionReason: '',
+        banker: '',
+        resolvedDate: null,
+      }
+      saveOperatorRequests({ ...operatorRequests, [id]: newReq })
+      addLog('Запрос оператора', `#${id}`, operatorName)
+      return { success: true }
+    } catch {
+      return { success: false, error: 'Сервер недоступен' }
+    }
+  }
+
+  const respondOperatorRequest = async (id, bankerName, payload) => {
+    const {
+      waitlistApproved,
+      stopApproved,
+      blockApproved,
+      unblockApproved,
+      faceApproved,
+      rejectionReason,
+    } = payload || {}
+    const request = operatorRequests[id]
+    if (!request || request.status !== 'pending') {
+      return { success: false, error: 'Нет активного запроса' }
+    }
+    try {
+      const res = await fetch(`/api/lk/${id}/operator-response`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          banker: bankerName,
+          waitlistApproved,
+          stopApproved,
+          blockApproved,
+          unblockApproved,
+          faceApproved,
+          rejectionReason,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.success) return { success: false, error: data.error || 'Ошибка' }
+      const updated = {
+        ...request,
+        status: 'resolved',
+        banker: bankerName,
+        waitlistApproved: request.needsWaitlist ? !!waitlistApproved : null,
+        stopApproved: request.needsStop ? !!stopApproved : null,
+        blockApproved: request.needsBlock ? !!blockApproved : null,
+        unblockApproved: request.needsUnblock ? !!unblockApproved : null,
+        faceApproved: request.needsFace ? !!faceApproved : null,
+        rejectionReason: rejectionReason || '',
+        resolvedDate: new Date().toISOString(),
+      }
+      saveOperatorRequests({ ...operatorRequests, [id]: updated })
+
+      const row = rows.find((r) => r.id === id)
+      if (row) {
+        let next = { ...row }
+        if (waitlistApproved && request.needsWaitlist) next = { ...next, inWaitlist: true }
+        if (stopApproved && request.needsStop) next = { ...next, onStop: true }
+        if (blockApproved && request.needsBlock) next = { ...next, status: 'блок' }
+        if (unblockApproved && request.needsUnblock) next = { ...next, status: 'актив' }
+        if (next.status !== row.status) {
+          const history = statusHistory[id] || []
+          saveHistory({
+            ...statusHistory,
+            [id]: [
+              ...history,
+              {
+                from: row.status || '',
+                to: next.status,
+                date: new Date().toISOString(),
+                changedBy: 'banker',
+              },
+            ],
+          })
+        }
+        saveData(rows.map((r) => (r.id === id ? next : r)))
+      }
+
+      addLog('Ответ на запрос оператора', `#${id}`, bankerName)
+      return { success: true }
+    } catch {
+      return { success: false, error: 'Сервер недоступен' }
+    }
+  }
+
   const refreshFromJson = () => {
-    // transformData уже обрабатывает все данные правильно
-    const cleanedData = transformData(lkRegistryData)
+    const cleanedData = transformData(INITIAL_DATA)
     const oldCount = rows.length
     const newCount = cleanedData.length
     
@@ -558,7 +743,9 @@ export const DataProvider = ({ children }) => {
     try {
       const res = await fetch(url)
       const text = await res.text()
-      const json = JSON.parse(text.replace(/^.*?\(/, '').slice(0, -2))
+      const match = text.match(/setResponse\(([\s\S]+)\)\s*;?\s*$/)
+      if (!match) return { success: false, error: 'Не удалось разобрать ответ Google Sheets' }
+      const json = JSON.parse(match[1])
       const table = json.table
       if (!table || !table.rows) return { success: false, error: 'Нет данных' }
       
@@ -584,46 +771,33 @@ export const DataProvider = ({ children }) => {
     }
   }
 
-  // Синхронизация с бэкендом для бота (Railway): отправка и получение
-  const syncTimeoutRef = useRef(null)
   useEffect(() => {
-    if (rows.length === 0) return
-    syncTimeoutRef.current && clearTimeout(syncTimeoutRef.current)
-    syncTimeoutRef.current = setTimeout(() => {
-      fetch('/api/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          rows,
-          bankerRequests,
-          raisedFromRest,
-        }),
-      }).catch(() => {})
-    }, 1000)
-    return () => {
-      if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current)
-    }
-  }, [rows, bankerRequests, raisedFromRest])
+    stateSnapshotRef.current = { rows, bankerRequests, raisedFromRest, operatorRequests, statusHistory }
+  }, [rows, bankerRequests, raisedFromRest, operatorRequests, statusHistory])
 
+  // Синхронизация с сервером: сначала загрузка, затем опрос каждые 2 сек
   useEffect(() => {
-    const t = setInterval(() => {
+    let cancelled = false
+
+    const pullState = () =>
       fetch('/api/state')
         .then((res) => res.json())
         .then((data) => {
-          if (data.rows && Array.isArray(data.rows) && data.rows.length > 0) {
-            saveData(data.rows)
-          }
-          if (data.bankerRequests && typeof data.bankerRequests === 'object') {
-            saveRequests(data.bankerRequests)
-          }
-          if (data.raisedFromRest && typeof data.raisedFromRest === 'object') {
-            saveRaised(data.raisedFromRest)
-          }
+          if (!cancelled) applyServerState(data)
         })
         .catch(() => {})
-    }, 5000)
-    return () => clearInterval(t)
-  }, [])
+
+    pullState().finally(() => {
+      if (!cancelled) hydratedRef.current = true
+    })
+
+    const t = setInterval(pullState, 2000)
+    return () => {
+      cancelled = true
+      clearInterval(t)
+      if (pushTimerRef.current) clearTimeout(pushTimerRef.current)
+    }
+  }, [applyServerState])
 
   const value = {
     rows,
@@ -646,7 +820,14 @@ export const DataProvider = ({ children }) => {
     approveReRaiseByAdmin,
     rejectBankerRequest,
     bankerRequests,
+    operatorRequests,
     getRaisedFromRestDate,
+    getOperatorRequest,
+    setLKStop,
+    setLKWaitlist,
+    requestOperatorAction,
+    requestOperatorUnblock: requestOperatorAction,
+    respondOperatorRequest,
     isRestStatus,
     SOON_TO_REST_THRESHOLD,
   }

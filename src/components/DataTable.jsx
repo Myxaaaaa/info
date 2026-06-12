@@ -6,10 +6,11 @@ import EditLKModal from './EditLKModal'
 import InfoLKModal from './InfoLKModal'
 import './DataTable.css'
 
-const DataTable = ({ canEdit = false, showRefresh = false, rowsOverride = null, blinkYellow = false, showSendToRestButton = false, onRowClick = null, initialStatusFilter = null }) => {
-  const { rows: contextRows, updateStatus, updateTurnover, bulkDelete, bulkUpdateStatus, refreshFromJson, statusOptions, getBankerRequest, requestActivateFromRest, requestReRaiseFromRest, getRaisedFromRestDate, isRestStatus } = useData()
+const DataTable = ({ canEdit: canEditProp, showRefresh = true, rowsOverride = null, blinkYellow = false, showSendToRestButton = false, onRowClick = null, initialStatusFilter = null }) => {
+  const { rows: contextRows, updateStatus, updateTurnover, bulkDelete, bulkUpdateStatus, refreshFromJson, statusOptions, getBankerRequest, getOperatorRequest, requestActivateFromRest, requestReRaiseFromRest, getRaisedFromRestDate, isRestStatus, setLKStop, setLKWaitlist } = useData()
   const rows = rowsOverride ?? contextRows
-  const { user, isBanker } = useAuth()
+  const { user, canBanker, canOperator, canEdit: canEditAuth } = useAuth()
+  const canEdit = canEditProp ?? canEditAuth
   const { getStatusStyle, getStatusLabel } = useStatusSettings()
   const [filter, setFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
@@ -117,6 +118,20 @@ const DataTable = ({ canEdit = false, showRefresh = false, rowsOverride = null, 
     alert(`Запросы отправлены для ${restRows.length} реквизитов`)
   }
 
+  const bankerName = user?.username || 'banker'
+
+  const handleQuickStop = async (row, e) => {
+    e?.stopPropagation?.()
+    const result = await setLKStop(row.id, !row.onStop, bankerName)
+    if (!result.success) alert(result.error)
+  }
+
+  const handleQuickWaitlist = async (row, e) => {
+    e?.stopPropagation?.()
+    const result = await setLKWaitlist(row.id, !row.inWaitlist, bankerName)
+    if (!result.success) alert(result.error)
+  }
+
   return (
     <div className={`data-table-wrapper ${blinkYellow ? 'blink-yellow' : ''}`}>
       <div className="data-table-controls">
@@ -167,7 +182,7 @@ const DataTable = ({ canEdit = false, showRefresh = false, rowsOverride = null, 
           <span className="bulk-count">Выбрано: {selectedArr.length}</span>
           <button className="bulk-btn bulk-delete" onClick={handleBulkDelete}>Удалить</button>
           <button className="bulk-btn bulk-status" onClick={() => setShowBulkStatusModal(true)}>Поменять статус</button>
-          {isBanker && (
+          {canBanker && (
             <button className="bulk-btn bulk-raise" onClick={handleBulkRaiseFromRest}>Поднять с отдыха</button>
           )}
           <button className="bulk-btn bulk-clear" onClick={() => setSelectedIds(new Set())}>Снять выбор</button>
@@ -246,7 +261,11 @@ const DataTable = ({ canEdit = false, showRefresh = false, rowsOverride = null, 
                   </td>
                 )}
                 <td>{idx + 1}</td>
-                <td className="col-name">{row.name || '—'}</td>
+                <td className="col-name">
+                  {row.name || '—'}
+                  {row.onStop && <span className="row-flag row-flag-stop" title="На стопе">🛑</span>}
+                  {row.inWaitlist && <span className="row-flag row-flag-wait" title="В вайте">📋</span>}
+                </td>
                 <td>{row.phone || '—'}</td>
                 <td>{row.card || '—'}</td>
                 <td>
@@ -283,36 +302,72 @@ const DataTable = ({ canEdit = false, showRefresh = false, rowsOverride = null, 
                 <td className="col-extra">{row.extra || '—'}</td>
                 <td className="col-actions" onClick={(e) => e.stopPropagation()}>
                   <div className="action-buttons">
+                    {canOperator && !canBanker && getOperatorRequest(row.id)?.status !== 'pending' && (
+                      <button
+                        type="button"
+                        className="btn-action btn-action-request"
+                        onClick={() => setInfoLK(row)}
+                        title="Запрос банкиру"
+                      >
+                        📩
+                      </button>
+                    )}
+                    {canBanker && (
+                      <>
+                        <button
+                          type="button"
+                          className={`btn-action btn-action-stop ${row.onStop ? 'active' : ''}`}
+                          onClick={(e) => handleQuickStop(row, e)}
+                          title={row.onStop ? 'Снять со стопа' : 'На стоп'}
+                        >
+                          🛑
+                        </button>
+                        <button
+                          type="button"
+                          className={`btn-action btn-action-wait ${row.inWaitlist ? 'active' : ''}`}
+                          onClick={(e) => handleQuickWaitlist(row, e)}
+                          title={row.inWaitlist ? 'Убрать из вайта' : 'В вайт'}
+                        >
+                          📋
+                        </button>
+                      </>
+                    )}
                     {showSendToRestButton && (
                       <button
                         type="button"
                         className="btn-send-rest"
                         onClick={() => updateStatus(row.id, 'отдых')}
-                        title="Отправили на отдых"
+                        title="На отдых"
                       >
-                        На отдых
+                        Отдых
                       </button>
                     )}
                     <button
-                      className="btn-info"
+                      type="button"
+                      className="btn-action btn-action-info"
                       onClick={() => setInfoLK(row)}
-                      title="Информация"
+                      title="Все действия"
                     >
-                      ℹ
+                      ⋯
                     </button>
                     {canEdit && (
                       <button
-                        className="btn-edit"
+                        type="button"
+                        className="btn-action btn-action-edit"
                         onClick={() => setEditingLK(row)}
                         title="Редактировать"
                       >
                         ✏
                       </button>
                     )}
-                    {getBankerRequest(row.id)?.status === 'pending' && !isBanker && (
-                      <span className="request-badge" title="Есть запрос от банкира">
-                        🔔
-                      </span>
+                    {getBankerRequest(row.id)?.status === 'pending' && canOperator && (
+                      <span className="request-badge" title="Запрос банкира">🔔</span>
+                    )}
+                    {getOperatorRequest(row.id)?.status === 'pending' && canBanker && (
+                      <span className="request-badge request-badge-op" title="Запрос оператора">📩</span>
+                    )}
+                    {getOperatorRequest(row.id)?.status === 'pending' && canOperator && !canBanker && (
+                      <span className="request-badge" title="Ваш запрос ожидает">⏳</span>
                     )}
                   </div>
                 </td>
@@ -399,35 +454,50 @@ const DataTable = ({ canEdit = false, showRefresh = false, rowsOverride = null, 
               )}
             </div>
             <div className="data-card-actions" onClick={(e) => e.stopPropagation()}>
-              {showSendToRestButton && (
-                <button
-                  type="button"
-                  className="btn-send-rest"
-                  onClick={() => updateStatus(row.id, 'отдых')}
-                >
-                  На отдых
+              {canOperator && !canBanker && getOperatorRequest(row.id)?.status !== 'pending' && (
+                <button type="button" className="btn-action btn-action-request" onClick={() => setInfoLK(row)}>
+                  📩 Запрос
                 </button>
               )}
-              <button
-                className="btn-info"
-                onClick={() => setInfoLK(row)}
-                title="Информация"
-              >
-                ℹ Инфо
+              {canBanker && (
+                <>
+                  <button
+                    type="button"
+                    className={`btn-action btn-action-stop ${row.onStop ? 'active' : ''}`}
+                    onClick={(e) => handleQuickStop(row, e)}
+                  >
+                    🛑 Стоп
+                  </button>
+                  <button
+                    type="button"
+                    className={`btn-action btn-action-wait ${row.inWaitlist ? 'active' : ''}`}
+                    onClick={(e) => handleQuickWaitlist(row, e)}
+                  >
+                    📋 Вайт
+                  </button>
+                </>
+              )}
+              {showSendToRestButton && (
+                <button type="button" className="btn-send-rest" onClick={() => updateStatus(row.id, 'отдых')}>
+                  Отдых
+                </button>
+              )}
+              <button type="button" className="btn-action btn-action-info" onClick={() => setInfoLK(row)}>
+                ⋯ Все
               </button>
               {canEdit && (
-                <button
-                  className="btn-edit"
-                  onClick={() => setEditingLK(row)}
-                  title="Редактировать"
-                >
+                <button type="button" className="btn-action btn-action-edit" onClick={() => setEditingLK(row)}>
                   ✏ Изменить
                 </button>
               )}
-              {getBankerRequest(row.id)?.status === 'pending' && !isBanker && (
-                <span className="request-badge" title="Есть запрос от банкира">
-                  🔔
-                </span>
+              {getBankerRequest(row.id)?.status === 'pending' && canOperator && (
+                <span className="request-badge" title="Запрос банкира">🔔</span>
+              )}
+              {getOperatorRequest(row.id)?.status === 'pending' && canBanker && (
+                <span className="request-badge request-badge-op" title="Запрос оператора">📩</span>
+              )}
+              {getOperatorRequest(row.id)?.status === 'pending' && canOperator && !canBanker && (
+                <span className="request-badge" title="Ваш запрос ожидает">⏳</span>
               )}
             </div>
           </div>

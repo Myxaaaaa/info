@@ -1,11 +1,9 @@
 import React, { useState, useEffect } from 'react'
 import { useData } from '../contexts/DataContext'
-import { useStatusSettings } from '../contexts/StatusSettingsContext'
 import './EditLKModal.css'
 
 const EditLKModal = ({ lk, isOpen, onClose }) => {
   const { updateLK, addLK, deleteLK, statusOptions } = useData()
-  const { getStatusStyle, getStatusLabel } = useStatusSettings()
   const [formData, setFormData] = useState({
     name: '',
     phone: '',

@@ -1,45 +1,130 @@
 import express from 'express'
+import { readFileSync, existsSync } from 'fs'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
+
+const __envPath = join(dirname(fileURLToPath(import.meta.url)), '../.env')
+if (existsSync(__envPath)) {
+  readFileSync(__envPath, 'utf8').split('\n').forEach((line) => {
+    const trimmed = line.trim()
+    if (!trimmed || trimmed.startsWith('#')) return
+    const eq = trimmed.indexOf('=')
+    if (eq === -1) return
+    const key = trimmed.slice(0, eq).trim()
+    const val = trimmed.slice(eq + 1).trim()
+    if (key && process.env[key] === undefined) process.env[key] = val
+  })
+}
+import { INITIAL_DATA } from '../src/data/tableData.js'
+import { loadState, saveState, loadUsers, saveUsers, loadSettings, saveSettings } from './persistence.js'
+import {
+  initTelegram,
+  sendTelegram,
+  setDefaultChatId,
+  getDefaultChatId,
+  isTelegramEnabled,
+  formatLK,
+  fetchTelegramChats,
+} from './telegram.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
 const app = express()
-const PORT = process.env.PORT || 3000
+const devMode = process.argv.includes('--dev')
+const PORT = devMode ? 3001 : (process.env.PORT || 3000)
 
-app.use(express.json({ limit: '2mb' }))
-
-// ========== In-memory state (для Railway; в проде использовать БД) ==========
-let state = {
-  rows: [],
-  bankerRequests: {},
-  raisedFromRest: {},
-}
-
-// Простая модель пользователей (общее для всех устройств на одном бэкенде)
-let users = [
-  {
-    id: 1,
-    username: 'admin',
-    password: '7895142358!@',
-    role: 'admin',
-  },
-]
+app.use(express.json({ limit: '4mb' }))
 
 const THRESHOLD = 4_000_000
+const MAX_LOGS = 500
 
-// ========== API: данные ЛК / бот ==========
+const defaultRows = INITIAL_DATA.map((r) => ({
+  ...r,
+  turnover: r.turnover || 0,
+  bank: r.bank || 'Мбанк',
+  onStop: false,
+  inWaitlist: false,
+}))
+
+const defaultState = {
+  rows: defaultRows,
+  bankerRequests: {},
+  raisedFromRest: {},
+  operatorRequests: {},
+  statusHistory: {},
+  logs: [],
+  updatedAt: Date.now(),
+}
+
+let state = loadState(defaultState)
+if (!state.updatedAt) state.updatedAt = Date.now()
+let users = loadUsers([
+  { id: 1, username: 'admin', password: '7895142358!@', role: 'admin' },
+  { id: 2, username: 'banker', password: 'banker123', role: 'banker' },
+  { id: 3, username: 'operator', password: 'operator123', role: 'user' },
+])
+
+let settings = loadSettings({ telegramChatId: process.env.TELEGRAM_CHAT_ID || '' })
+setDefaultChatId(settings.telegramChatId)
+
+initTelegram()
+
+function persistState() {
+  state.updatedAt = Date.now()
+  saveState(state)
+}
+
+function persistUsers() {
+  saveUsers(users)
+}
+
+function persistSettings() {
+  saveSettings(settings)
+  setDefaultChatId(settings.telegramChatId)
+}
+
+function addServerLog(action, details = '', userId = '') {
+  const entry = {
+    id: Date.now(),
+    date: new Date().toISOString(),
+    action,
+    details,
+    userId,
+  }
+  state.logs = [entry, ...(state.logs || [])].slice(0, MAX_LOGS)
+  persistState()
+}
+
+async function notifyTelegram(text, chatId) {
+  const target = chatId || settings.telegramChatId || getDefaultChatId()
+  return sendTelegram(text, target)
+}
+
+function findRow(id) {
+  return state.rows.find((r) => r.id === parseInt(id, 10))
+}
+
+// ========== API: state ==========
+
 app.get('/api/state', (req, res) => {
-  res.json(state)
+  res.json({
+    ...state,
+    updatedAt: state.updatedAt || Date.now(),
+    settings: { telegramChatId: settings.telegramChatId, telegramEnabled: isTelegramEnabled() },
+  })
 })
 
 app.post('/api/sync', (req, res) => {
-  const { rows, bankerRequests, raisedFromRest } = req.body || {}
+  const { rows, bankerRequests, raisedFromRest, operatorRequests, statusHistory, logs } = req.body || {}
   if (Array.isArray(rows)) state.rows = rows
   if (bankerRequests && typeof bankerRequests === 'object') state.bankerRequests = bankerRequests
   if (raisedFromRest && typeof raisedFromRest === 'object') state.raisedFromRest = raisedFromRest
-  res.json({ ok: true })
+  if (operatorRequests && typeof operatorRequests === 'object') state.operatorRequests = operatorRequests
+  if (statusHistory && typeof statusHistory === 'object') state.statusHistory = statusHistory
+  if (Array.isArray(logs)) state.logs = logs.slice(0, MAX_LOGS)
+  persistState()
+  res.json({ ok: true, updatedAt: state.updatedAt })
 })
 
 app.get('/api/soon-to-rest', (req, res) => {
@@ -48,31 +133,79 @@ app.get('/api/soon-to-rest', (req, res) => {
 })
 
 app.get('/api/raise-requests', (req, res) => {
-  const pending = Object.entries(state.bankerRequests)
+  const list = Object.entries(state.bankerRequests)
     .filter(([, r]) => r?.status === 'pending' || r?.status === 're_raise_pending')
     .map(([id, r]) => {
-      const row = state.rows.find((x) => x.id === parseInt(id, 10))
+      const row = findRow(id)
       return {
         id: parseInt(id, 10),
-        lk: row ? `${row.name || row.card || '—'} (${row.phone || '—'})` : `#${id}`,
+        lk: formatLK(row),
         banker: r.banker,
         date: r.date,
         status: r.status,
       }
     })
-  res.json({ list: pending, count: pending.length })
+  res.json({ list, count: list.length })
+})
+
+app.get('/api/operator-requests', (req, res) => {
+  const list = Object.entries(state.operatorRequests || {})
+    .filter(([, r]) => r?.status === 'pending')
+    .map(([id, r]) => {
+      const row = findRow(id)
+      return {
+        id: parseInt(id, 10),
+        lk: formatLK(row),
+        operator: r.operator,
+        date: r.date,
+        needsUnblock: r.needsUnblock,
+        needsFace: r.needsFace,
+        stuckAmount: r.stuckAmount,
+        note: r.note,
+      }
+    })
+  res.json({ list, count: list.length })
 })
 
 app.get('/api/rows_by_status', (req, res) => {
   const status = (req.query.status || '').trim().toLowerCase()
   let list = state.rows
-  if (status) {
-    list = list.filter((r) => (r.status || '').toLowerCase() === status)
-  }
+  if (status) list = list.filter((r) => (r.status || '').toLowerCase() === status)
   res.json({ list, count: list.length })
 })
 
-// ========== API: пользователи / авторизация ==========
+// ========== Settings ==========
+
+app.get('/api/settings', (req, res) => {
+  res.json({
+    telegramChatId: settings.telegramChatId,
+    telegramEnabled: isTelegramEnabled(),
+  })
+})
+
+app.post('/api/settings', (req, res) => {
+  const { telegramChatId } = req.body || {}
+  if (telegramChatId !== undefined) {
+    settings.telegramChatId = String(telegramChatId || '').trim()
+    persistSettings()
+  }
+  res.json({ success: true, settings: { telegramChatId: settings.telegramChatId, telegramEnabled: isTelegramEnabled() } })
+})
+
+// ========== Logs ==========
+
+app.get('/api/logs', (req, res) => {
+  res.json({ logs: state.logs || [] })
+})
+
+app.post('/api/logs', (req, res) => {
+  const { action, details, userId } = req.body || {}
+  if (!action) return res.status(400).json({ success: false, error: 'Нет действия' })
+  addServerLog(action, details || '', userId || '')
+  res.json({ success: true })
+})
+
+// ========== Auth / users ==========
 
 app.post('/api/login', (req, res) => {
   const { username, password } = req.body || {}
@@ -84,11 +217,19 @@ app.post('/api/login', (req, res) => {
       u.username.toLowerCase() === String(username).toLowerCase() &&
       u.password === String(password)
   )
-  if (!found) {
-    return res.status(401).json({ success: false, error: 'Неверный логин или пароль' })
-  }
-  const user = { id: found.id, username: found.username, role: found.role }
-  res.json({ success: true, user })
+  if (!found) return res.status(401).json({ success: false, error: 'Неверный логин или пароль' })
+  res.json({ success: true, user: { id: found.id, username: found.username, role: found.role } })
+})
+
+app.get('/api/session', (req, res) => {
+  const userId = parseInt(req.query.userId, 10)
+  if (!userId) return res.json({ valid: false })
+  const found = users.find((u) => u.id === userId)
+  if (!found) return res.json({ valid: false })
+  res.json({
+    valid: true,
+    user: { id: found.id, username: found.username, role: found.role },
+  })
 })
 
 app.get('/api/users', (req, res) => {
@@ -100,35 +241,24 @@ app.post('/api/users', (req, res) => {
   const name = String(username || '').trim()
   const pass = String(password || '').trim()
   const r = (role || 'user').trim() || 'user'
-
-  if (!name || !pass) {
-    return res.status(400).json({ success: false, error: 'Укажите логин и пароль' })
-  }
-
-  const exists = users.some((u) => u.username.toLowerCase() === name.toLowerCase())
-  if (exists) {
+  if (!name || !pass) return res.status(400).json({ success: false, error: 'Укажите логин и пароль' })
+  if (users.some((u) => u.username.toLowerCase() === name.toLowerCase())) {
     return res.status(409).json({ success: false, error: 'Пользователь с таким логином уже есть' })
   }
-
   const maxId = users.reduce((m, u) => (u.id > m ? u.id : m), 0)
-  const newUser = {
-    id: maxId + 1,
-    username: name,
-    password: pass,
-    role: r,
-  }
-  users = [...users, newUser]
+  users = [...users, { id: maxId + 1, username: name, password: pass, role: r }]
+  persistUsers()
+  addServerLog('Добавление пользователя', name, r)
   res.status(201).json({ success: true })
 })
 
 app.delete('/api/users/:id', (req, res) => {
   const id = parseInt(req.params.id, 10)
-  if (!id) return res.status(400).json({ success: false, error: 'Некорректный ID' })
-
   const exists = users.find((u) => u.id === id)
   if (!exists) return res.status(404).json({ success: false, error: 'Пользователь не найден' })
-
   users = users.filter((u) => u.id !== id)
+  persistUsers()
+  addServerLog('Удаление пользователя', exists.username)
   res.json({ success: true })
 })
 
@@ -143,38 +273,219 @@ app.post('/api/users/:id/change_password', (req, res) => {
   const trimmed = String(newPassword || '').trim()
   if (!trimmed) return res.status(400).json({ success: false, error: 'Введите новый пароль' })
   user.password = trimmed
+  persistUsers()
   res.json({ success: true })
 })
 
 app.post('/api/update_status', (req, res) => {
   const { id, status } = req.body || {}
   const numId = parseInt(id, 10)
-  if (!numId || !state.rows.find((r) => r.id === numId)) {
-    return res.status(400).json({ ok: false, error: 'ЛК не найден' })
-  }
+  if (!numId || !findRow(numId)) return res.status(400).json({ ok: false, error: 'ЛК не найден' })
   state.rows = state.rows.map((r) => (r.id === numId ? { ...r, status: status || '' } : r))
+  persistState()
   res.json({ ok: true })
 })
 
-// ========== Telegram Bot — отключен (добавим позже) ==========
+// ========== Telegram notify ==========
 
-// Заглушка для уведомлений, чтобы фронт не падал
 app.post('/api/notify', async (req, res) => {
-  const { text } = req.body || {}
+  const { text, chatId } = req.body || {}
   if (!text || typeof text !== 'string') {
     return res.status(400).json({ success: false, error: 'Нет текста сообщения' })
   }
-  // Просто подтверждаем приём, без отправки в Telegram
-  return res.json({ success: true, disabled: true })
+  const result = await notifyTelegram(text, chatId)
+  if (!result.success) return res.status(500).json(result)
+  return res.json({ success: true })
 })
 
-// ========== Static (Vite build) ==========
-app.use(express.static(join(__dirname, '../dist')))
+// ========== Banker actions (server-side + telegram) ==========
 
-app.get('*', (req, res) => {
-  res.sendFile(join(__dirname, '../dist/index.html'))
+app.post('/api/lk/:id/stop', async (req, res) => {
+  const id = parseInt(req.params.id, 10)
+  const { onStop, banker } = req.body || {}
+  const row = findRow(id)
+  if (!row) return res.status(404).json({ success: false, error: 'ЛК не найден' })
+
+  state.rows = state.rows.map((r) => (r.id === id ? { ...r, onStop: !!onStop } : r))
+  persistState()
+  addServerLog(onStop ? 'Стоп реквизит' : 'Снят со стопа', formatLK(row), banker || '')
+
+  const icon = onStop ? '🛑' : '✅'
+  const action = onStop ? 'СТОП' : 'снят со СТОПА'
+  await notifyTelegram(
+    `${icon} <b>Банкир ${banker || '—'}</b>\n${action}\n👤 ${row.name || '—'}\n📞 ${row.phone || '—'}\n💳 ${row.card || '—'}`
+  )
+  res.json({ success: true })
 })
+
+app.post('/api/lk/:id/waitlist', async (req, res) => {
+  const id = parseInt(req.params.id, 10)
+  const { inWaitlist, banker } = req.body || {}
+  const row = findRow(id)
+  if (!row) return res.status(404).json({ success: false, error: 'ЛК не найден' })
+
+  state.rows = state.rows.map((r) => (r.id === id ? { ...r, inWaitlist: !!inWaitlist } : r))
+  persistState()
+  addServerLog(inWaitlist ? 'В вайте' : 'Не в вайте', formatLK(row), banker || '')
+
+  const status = inWaitlist ? '✅ В ВАЙТЕ' : '❌ НЕ В ВАЙТЕ'
+  await notifyTelegram(
+    `📋 <b>Банкир ${banker || '—'}</b>\n${status}\n👤 ${row.name || '—'}\n📞 ${row.phone || '—'}`
+  )
+  res.json({ success: true })
+})
+
+function operatorRequestParts(req) {
+  const parts = []
+  if (req.needsWaitlist) parts.push('📋 В вайт')
+  if (req.needsStop) parts.push('🛑 На стоп')
+  if (req.needsBlock) parts.push('🔒 Блок')
+  if (req.needsUnblock) parts.push('🔓 Разблок')
+  if (req.needsFace) parts.push('👤 Снять Face ID')
+  return parts
+}
+
+function hasOperatorNeeds(body) {
+  return !!(body.needsWaitlist || body.needsStop || body.needsBlock || body.needsUnblock || body.needsFace)
+}
+
+app.post('/api/lk/:id/operator-request', async (req, res) => {
+  const id = parseInt(req.params.id, 10)
+  const {
+    operator,
+    needsWaitlist,
+    needsStop,
+    needsBlock,
+    needsUnblock,
+    needsFace,
+    stuckAmount,
+    note,
+  } = req.body || {}
+  const row = findRow(id)
+  if (!row) return res.status(404).json({ success: false, error: 'ЛК не найден' })
+  if (!hasOperatorNeeds(req.body || {})) {
+    return res.status(400).json({ success: false, error: 'Выберите хотя бы один тип запроса' })
+  }
+
+  const existing = state.operatorRequests?.[id]
+  if (existing?.status === 'pending') {
+    return res.status(409).json({ success: false, error: 'Запрос уже отправлен' })
+  }
+
+  const newReq = {
+    operator: operator || 'operator',
+    date: new Date().toISOString(),
+    status: 'pending',
+    needsWaitlist: !!needsWaitlist,
+    needsStop: !!needsStop,
+    needsBlock: !!needsBlock,
+    needsUnblock: !!needsUnblock,
+    needsFace: !!needsFace,
+    stuckAmount: stuckAmount || '',
+    note: note || '',
+    waitlistApproved: null,
+    stopApproved: null,
+    blockApproved: null,
+    unblockApproved: null,
+    faceApproved: null,
+    rejectionReason: '',
+    banker: '',
+    resolvedDate: null,
+  }
+
+  state.operatorRequests = { ...state.operatorRequests, [id]: newReq }
+  persistState()
+  addServerLog('Запрос оператора', formatLK(row), operator || '')
+
+  const parts = operatorRequestParts(newReq)
+  const amount = stuckAmount ? `\n💰 Застряло: <b>${stuckAmount}</b>` : ''
+  const noteText = note ? `\n📝 ${note}` : ''
+
+  await notifyTelegram(
+    `🔔 <b>Запрос оператора ${operator || '—'}</b>\n${parts.join(' + ')}\n👤 ${row.name || '—'}\n📞 ${row.phone || '—'}\n💳 ${row.card || '—'}${amount}${noteText}`
+  )
+  res.json({ success: true })
+})
+
+app.post('/api/lk/:id/operator-response', async (req, res) => {
+  const id = parseInt(req.params.id, 10)
+  const {
+    banker,
+    waitlistApproved,
+    stopApproved,
+    blockApproved,
+    unblockApproved,
+    faceApproved,
+    rejectionReason,
+  } = req.body || {}
+  const row = findRow(id)
+  const request = state.operatorRequests?.[id]
+  if (!row || !request || request.status !== 'pending') {
+    return res.status(400).json({ success: false, error: 'Нет активного запроса' })
+  }
+
+  const updated = {
+    ...request,
+    status: 'resolved',
+    banker: banker || '',
+    waitlistApproved: request.needsWaitlist ? !!waitlistApproved : null,
+    stopApproved: request.needsStop ? !!stopApproved : null,
+    blockApproved: request.needsBlock ? !!blockApproved : null,
+    unblockApproved: request.needsUnblock ? !!unblockApproved : null,
+    faceApproved: request.needsFace ? !!faceApproved : null,
+    rejectionReason: rejectionReason || '',
+    resolvedDate: new Date().toISOString(),
+  }
+  state.operatorRequests = { ...state.operatorRequests, [id]: updated }
+
+  let rowUpdates = { ...row }
+  if (waitlistApproved && request.needsWaitlist) rowUpdates.inWaitlist = true
+  if (stopApproved && request.needsStop) rowUpdates.onStop = true
+  if (blockApproved && request.needsBlock) rowUpdates.status = 'блок'
+  if (unblockApproved && request.needsUnblock) rowUpdates.status = 'актив'
+
+  state.rows = state.rows.map((r) => (r.id === id ? rowUpdates : r))
+  persistState()
+  addServerLog('Ответ банкира на запрос', formatLK(row), banker || '')
+
+  const lines = [`🏦 <b>Банкир ${banker || '—'}</b>`, `👤 ${row.name || '—'}`, `📞 ${row.phone || '—'}`]
+  if (request.needsWaitlist) lines.push(waitlistApproved ? '📋 Вайт: ✅ ДА' : '📋 Вайт: ❌ НЕТ')
+  if (request.needsStop) lines.push(stopApproved ? '🛑 Стоп: ✅ ДА' : '🛑 Стоп: ❌ НЕТ')
+  if (request.needsBlock) lines.push(blockApproved ? '🔒 Блок: ✅ ДА' : '🔒 Блок: ❌ НЕТ')
+  if (request.needsUnblock) lines.push(unblockApproved ? '🔓 Разблок: ✅ ДА' : '🔓 Разблок: ❌ НЕТ')
+  if (request.needsFace) lines.push(faceApproved ? '👤 Face ID: ✅ СНЯТ' : '👤 Face ID: ❌ НЕТ')
+  if (rejectionReason) lines.push(`❗ Причина отказа: ${rejectionReason}`)
+
+  await notifyTelegram(lines.join('\n'))
+  res.json({ success: true })
+})
+
+app.post('/api/telegram/test', async (req, res) => {
+  const { chatId } = req.body || {}
+  const result = await notifyTelegram(
+    '✅ <b>MBank ЛК</b>\nТест — бот подключён и работает.',
+    chatId
+  )
+  if (!result.success) return res.status(500).json(result)
+  res.json({ success: true, enabled: isTelegramEnabled() })
+})
+
+app.get('/api/telegram/chats', async (req, res) => {
+  const result = await fetchTelegramChats()
+  if (!result.success) return res.status(500).json(result)
+  res.json(result)
+})
+
+// ========== Static ==========
+if (!devMode) {
+  app.use(express.static(join(__dirname, '../dist')))
+  app.get('*', (req, res) => {
+    res.sendFile(join(__dirname, '../dist/index.html'))
+  })
+}
 
 app.listen(PORT, '0.0.0.0', () => {
-  console.log('Server on port', PORT)
+  console.log(`Server on port ${PORT}${devMode ? ' (dev API)' : ''}`)
+  console.log(`Persistence: ${process.env.DATA_DIR || 'server/data'}`)
+  console.log(`Telegram: ${isTelegramEnabled() ? 'enabled' : 'disabled'}`)
 })

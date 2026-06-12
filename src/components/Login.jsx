@@ -11,14 +11,13 @@ const Login = () => {
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
-    
+
     if (!username || !password) {
       setError('Введите логин и пароль')
       return
     }
 
     const result = await login(username, password)
-    
     if (!result.success) {
       setError(result.error || 'Ошибка входа')
     }
@@ -26,11 +25,23 @@ const Login = () => {
 
   return (
     <div className="login-container">
+      <div className="login-bg-shape login-bg-shape-1" />
+      <div className="login-bg-shape login-bg-shape-2" />
+
       <div className="login-box">
-        <h2>Вход в систему</h2>
-        <form onSubmit={handleSubmit}>
+        <div className="login-brand">
+          <div className="brand-logo brand-logo-lg">M</div>
+          <div className="login-brand-text">
+            <h1>MBank</h1>
+            <p>Реестр лицевых счетов</p>
+          </div>
+        </div>
+
+        <h2 className="login-title">Вход в систему</h2>
+
+        <form onSubmit={handleSubmit} className="login-form">
           <div className="form-group">
-            <label htmlFor="username">Логин:</label>
+            <label htmlFor="username">Логин</label>
             <input
               type="text"
               id="username"
@@ -38,11 +49,12 @@ const Login = () => {
               onChange={(e) => setUsername(e.target.value)}
               placeholder="Введите логин"
               disabled={isLoading}
+              autoComplete="username"
             />
           </div>
-          
+
           <div className="form-group">
-            <label htmlFor="password">Пароль:</label>
+            <label htmlFor="password">Пароль</label>
             <input
               type="password"
               id="password"
@@ -50,6 +62,7 @@ const Login = () => {
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Введите пароль"
               disabled={isLoading}
+              autoComplete="current-password"
             />
           </div>
 
@@ -60,9 +73,9 @@ const Login = () => {
           </button>
         </form>
 
-        <div className="login-hint">
-          <p>Введите свой логин и пароль, выданные администратором.</p>
-        </div>
+        <p className="login-hint">
+          Логин и пароль выдаёт администратор
+        </p>
       </div>
     </div>
   )

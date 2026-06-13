@@ -7,10 +7,12 @@ import InfoLKModal from './InfoLKModal'
 import './DataTable.css'
 
 const DataTable = ({ canEdit: canEditProp, showRefresh = true, rowsOverride = null, blinkYellow = false, showSendToRestButton = false, onRowClick = null, initialStatusFilter = null }) => {
-  const { rows: contextRows, updateStatus, updateTurnover, bulkDelete, bulkUpdateStatus, refreshFromJson, statusOptions, getBankerRequest, getOperatorRequest, requestActivateFromRest, requestReRaiseFromRest, getRaisedFromRestDate, isRestStatus, setLKStop, setLKWaitlist } = useData()
+  const { rows: contextRows, updateStatus, updateTurnover, bulkDelete, bulkUpdateStatus, refreshFromJson, statusOptions, getBankerRequest, getOperatorRequest, requestActivateFromRest, requestReRaiseFromRest, getRaisedFromRestDate, isRestStatus, setLKStop, setLKWaitlist, bulkRequestOperatorAction } = useData()
   const rows = rowsOverride ?? contextRows
   const { user, canBanker, canOperator, canEdit: canEditAuth } = useAuth()
   const canEdit = canEditProp ?? canEditAuth
+  const canSelect = canEdit || (canOperator && !canBanker)
+  const isOperatorOnly = canOperator && !canBanker
   const { getStatusStyle, getStatusLabel } = useStatusSettings()
   const [filter, setFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
@@ -23,6 +25,7 @@ const DataTable = ({ canEdit: canEditProp, showRefresh = true, rowsOverride = nu
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [bulkStatus, setBulkStatus] = useState('')
   const [showBulkStatusModal, setShowBulkStatusModal] = useState(false)
+  const [bulkLoading, setBulkLoading] = useState(false)
 
   const filteredRows = useMemo(() => {
     let list = rows
@@ -118,6 +121,21 @@ const DataTable = ({ canEdit: canEditProp, showRefresh = true, rowsOverride = nu
     alert(`Запросы отправлены для ${restRows.length} реквизитов`)
   }
 
+  const operatorName = user?.username || 'operator'
+
+  const handleBulkOperatorRequest = async (action) => {
+    if (!selectedArr.length) return
+    setBulkLoading(true)
+    const result = await bulkRequestOperatorAction(selectedArr, operatorName, action)
+    setBulkLoading(false)
+    if (result.success) {
+      alert(`Отправлено: ${result.count}${result.skipped ? `, пропущено: ${result.skipped}` : ''}`)
+      setSelectedIds(new Set())
+    } else {
+      alert(result.error || 'Ошибка')
+    }
+  }
+
   const bankerName = user?.username || 'banker'
 
   const handleQuickStop = async (row, e) => {
@@ -189,6 +207,27 @@ const DataTable = ({ canEdit: canEditProp, showRefresh = true, rowsOverride = nu
         </div>
       )}
 
+      {selectedArr.length > 0 && isOperatorOnly && (
+        <div className="bulk-actions bulk-actions-operator">
+          <span className="bulk-count">Выбрано: {selectedArr.length}</span>
+          <button
+            className="bulk-btn bulk-waitlist"
+            disabled={bulkLoading}
+            onClick={() => handleBulkOperatorRequest('waitlist')}
+          >
+            📋 В вайт
+          </button>
+          <button
+            className="bulk-btn bulk-unblock"
+            disabled={bulkLoading}
+            onClick={() => handleBulkOperatorRequest('unblock')}
+          >
+            🔓 На разблок
+          </button>
+          <button className="bulk-btn bulk-clear" onClick={() => setSelectedIds(new Set())}>Снять</button>
+        </div>
+      )}
+
       {/* Bulk status modal */}
       {showBulkStatusModal && (
         <div className="modal-overlay" onClick={() => setShowBulkStatusModal(false)}>
@@ -218,7 +257,7 @@ const DataTable = ({ canEdit: canEditProp, showRefresh = true, rowsOverride = nu
         <table className="data-table">
           <thead>
             <tr>
-              {canEdit && (
+              {canSelect && (
                 <th className="col-checkbox">
                   <input
                     type="checkbox"
@@ -251,7 +290,7 @@ const DataTable = ({ canEdit: canEditProp, showRefresh = true, rowsOverride = nu
                 role={onRowClick ? 'button' : undefined}
                 style={onRowClick ? { cursor: 'pointer' } : undefined}
               >
-                {canEdit && (
+                {canSelect && (
                   <td className="col-checkbox">
                     <input
                       type="checkbox"
@@ -388,7 +427,7 @@ const DataTable = ({ canEdit: canEditProp, showRefresh = true, rowsOverride = nu
             style={onRowClick ? { cursor: 'pointer' } : undefined}
           >
             <div className="data-card-header" onClick={(e) => e.stopPropagation()}>
-              {canEdit && (
+              {canSelect && (
                 <input
                   type="checkbox"
                   checked={selectedIds.has(row.id)}

@@ -29,7 +29,7 @@ const OperatorRequestsTab = () => {
     <div className="raise-requests-tab">
       <div className="raise-requests-header">
         <h3>Запросы операторов</h3>
-        <p>Вайт, стоп, блок, разблок, Face ID — ожидают ответа банкира</p>
+        <p>Вайт и разблок — ожидают ответа банкира</p>
       </div>
       {pendingList.length === 0 ? (
         <div className="raise-requests-empty">Нет активных запросов</div>
@@ -45,8 +45,6 @@ const OperatorRequestsTab = () => {
                 <span className="raise-request-date">{formatDate(request.date)}</span>
                 <span className="raise-request-badge">
                   {request.needsWaitlist && '📋 Вайт '}
-                  {request.needsStop && '🛑 Стоп '}
-                  {request.needsBlock && '🔒 Блок '}
                   {request.needsUnblock && '🔓 Разблок '}
                   {request.needsFace && '👤 Face '}
                   {request.stuckAmount && `💰 ${request.stuckAmount}`}

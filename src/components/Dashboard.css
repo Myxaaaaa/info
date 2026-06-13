@@ -100,10 +100,10 @@
 }
 
 .dashboard-content {
-  max-width: 1280px;
+  max-width: 1440px;
   width: 100%;
   margin: 0 auto;
-  padding: 20px 16px;
+  padding: 16px 12px;
   padding-bottom: calc(24px + var(--safe-bottom));
   flex: 1;
 }
@@ -162,6 +162,10 @@
   }
 
   .dashboard-content {
-    padding: 28px 24px;
+    padding: 24px 28px;
+  }
+
+  .main-tabs .tabs-header {
+    align-items: center;
   }
 }

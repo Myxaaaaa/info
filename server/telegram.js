@@ -3,15 +3,46 @@ import TelegramBot from 'node-telegram-bot-api'
 let bot = null
 let defaultChatId = process.env.TELEGRAM_CHAT_ID || ''
 
-export function initTelegram() {
+export function initTelegram(onConnect) {
   const token = process.env.BOT_TOKEN
   if (!token) {
     console.log('Telegram: BOT_TOKEN не задан — бот отключён')
     return null
   }
   try {
-    bot = new TelegramBot(token, { polling: false })
-    console.log('Telegram: бот подключён')
+    bot = new TelegramBot(token, { polling: true })
+    console.log('Telegram: бот подключён (polling)')
+
+    bot.onText(/\/(connect|start|link)(@\w+)?$/i, async (msg) => {
+      const chatId = String(msg.chat.id)
+      const title = msg.chat.title || msg.from?.first_name || msg.from?.username || 'чат'
+      if (onConnect) {
+        try {
+          await onConnect(chatId, title)
+        } catch (e) {
+          console.error('Telegram connect error:', e.message)
+        }
+      }
+      const isGroup = msg.chat.type === 'group' || msg.chat.type === 'supergroup'
+      const hint = isGroup
+        ? 'Группа подключена — уведомления о запросах будут приходить сюда.'
+        : 'Личный чат подключен — уведомления будут приходить сюда.'
+      await bot.sendMessage(
+        msg.chat.id,
+        `✅ <b>MBank ЛК подключён</b>\n\n${hint}\n\nChat ID: <code>${chatId}</code>\n\nКоманды:\n/connect — подключить этот чат\n/status — проверить связь`,
+        { parse_mode: 'HTML' }
+      )
+    })
+
+    bot.onText(/\/status(@\w+)?$/i, async (msg) => {
+      const linked = defaultChatId ? `✅ Активный чат: <code>${defaultChatId}</code>` : '⚠️ Чат ещё не привязан — напиши /connect'
+      await bot.sendMessage(
+        msg.chat.id,
+        `🤖 <b>MBank ЛК бот</b>\n${linked}\nТекущий чат: <code>${msg.chat.id}</code>`,
+        { parse_mode: 'HTML' }
+      )
+    })
+
     return bot
   } catch (e) {
     console.error('Telegram init error:', e.message)
@@ -34,32 +65,46 @@ export function isTelegramEnabled() {
 export function explainTelegramError(message = '') {
   const msg = String(message)
   if (msg.includes('401') || /unauthorized/i.test(msg)) {
-    return '401 — неверный BOT_TOKEN. Создай новый токен в @BotFather и пропиши в .env (или на Railway), затем перезапусти сервер.'
+    return '401 — неверный BOT_TOKEN. Создай новый токен в @BotFather и пропиши в .env, затем перезапусти сервер.'
   }
   if (msg.includes('403') || /forbidden/i.test(msg)) {
-    return '403 — бот не может писать в этот чат. Добавь бота в группу, напиши ему /start в личке или проверь chat ID (для группы начинается с -100...).'
+    return '403 — бот не может писать в чат. Добавь бота в группу и напиши /connect'
   }
   if (msg.includes('400') && /chat not found/i.test(msg)) {
-    return 'Чат не найден — неверный chat ID. Нажми «Найти chat ID» после сообщения боту.'
+    return 'Чат не найден. Добавь бота в группу и напиши /connect'
   }
   if (msg.includes('chat_id')) {
-    return 'Неверный chat ID. Для группы нужен формат -1001234567890, не 401 и не 403.'
+    return 'Чат не подключён. В группе напиши боту /connect'
   }
   return msg || 'Неизвестная ошибка Telegram'
+}
+
+/** Формат: "в вайт\nИмя\tтелефон" */
+export function formatLKLine(row) {
+  if (!row) return '—\t—'
+  const name = (row.name || '—').trim()
+  const phone = (row.phone || '—').trim()
+  return `${name}\t${phone}`
+}
+
+export function formatOperatorRequestMessage(action, rows) {
+  const list = Array.isArray(rows) ? rows : [rows]
+  const lines = list.map((r) => formatLKLine(r))
+  return `${action}\n${lines.join('\n')}`
+}
+
+export function formatOperatorApprovedMessage(action, rows) {
+  return formatOperatorRequestMessage(action, rows)
 }
 
 export async function sendTelegram(text, chatId) {
   if (!bot) return { success: false, error: 'Бот не настроен — задай BOT_TOKEN в .env и перезапусти сервер' }
   const target = String(chatId || defaultChatId || '').trim()
-  if (!target) return { success: false, error: 'Не указан chat ID' }
-  if (target === '401' || target === '403') {
-    return {
-      success: false,
-      error: '401 и 403 — это коды ошибок, не chat ID. Укажи ID чата, например -1001234567890',
-    }
+  if (!target) {
+    return { success: false, error: 'Чат не подключён. Добавь бота в группу и напиши /connect' }
   }
   try {
-    await bot.sendMessage(target, text, { parse_mode: 'HTML' })
+    await bot.sendMessage(target, text)
     return { success: true }
   } catch (e) {
     const explained = explainTelegramError(e.message)

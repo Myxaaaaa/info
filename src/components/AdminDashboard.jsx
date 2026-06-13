@@ -201,10 +201,12 @@ const AdminDashboard = () => {
             <section className="admin-section">
               <h2>Telegram — уведомления</h2>
               <p className="admin-hint">
-                <strong>401 и 403 — это не chat ID!</strong> Это ошибки Telegram: 401 = плохой токен бота, 403 = бот не может писать в чат.
+                <strong>Подключение через бота:</strong> добавь бота в группу → напиши <code>/connect</code> → готово.
+                Chat ID вводить вручную не обязательно.
               </p>
               <p className="admin-hint">
-                1) Токен <code>BOT_TOKEN</code> в файле <code>.env</code> (от @BotFather). 2) Добавь бота в группу или напиши ему /start. 3) Укажи chat ID ниже.
+                Команды бота: <code>/connect</code> — привязать группу, <code>/status</code> — проверить связь.
+                Нужен рабочий <code>BOT_TOKEN</code> в <code>.env</code>.
               </p>
               <p className={`admin-hint ${telegramEnabled ? 'form-success' : 'form-error'}`}>
                 Статус бота: {telegramEnabled ? '✅ токен загружен' : '❌ нет BOT_TOKEN в .env — перезапусти сервер после добавления'}

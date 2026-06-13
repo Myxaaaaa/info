@@ -27,16 +27,12 @@ const InfoLKModal = ({ lk, isOpen, onClose }) => {
   const [rejectReason, setRejectReason] = useState('')
   const [showReRaiseModal, setShowReRaiseModal] = useState(false)
   const [opNeedsWaitlist, setOpNeedsWaitlist] = useState(false)
-  const [opNeedsStop, setOpNeedsStop] = useState(false)
-  const [opNeedsBlock, setOpNeedsBlock] = useState(false)
   const [opNeedsUnblock, setOpNeedsUnblock] = useState(false)
   const [opNeedsFace, setOpNeedsFace] = useState(false)
   const [opStuckAmount, setOpStuckAmount] = useState('')
   const [opNote, setOpNote] = useState('')
   const [bankerRejectReason, setBankerRejectReason] = useState('')
   const [bankerWaitlistYes, setBankerWaitlistYes] = useState(true)
-  const [bankerStopYes, setBankerStopYes] = useState(true)
-  const [bankerBlockYes, setBankerBlockYes] = useState(true)
   const [bankerUnblockYes, setBankerUnblockYes] = useState(true)
   const [bankerFaceYes, setBankerFaceYes] = useState(true)
   const [loading, setLoading] = useState(false)
@@ -121,8 +117,6 @@ const InfoLKModal = ({ lk, isOpen, onClose }) => {
     setLoading(true)
     const result = await requestOperatorAction(lk.id, operatorName, {
       needsWaitlist: opNeedsWaitlist,
-      needsStop: opNeedsStop,
-      needsBlock: opNeedsBlock,
       needsUnblock: opNeedsUnblock,
       needsFace: opNeedsFace,
       stuckAmount: opStuckAmount,
@@ -140,8 +134,6 @@ const InfoLKModal = ({ lk, isOpen, onClose }) => {
   const handleBankerRespond = async () => {
     const denied =
       (opRequest?.needsWaitlist && !bankerWaitlistYes) ||
-      (opRequest?.needsStop && !bankerStopYes) ||
-      (opRequest?.needsBlock && !bankerBlockYes) ||
       (opRequest?.needsUnblock && !bankerUnblockYes) ||
       (opRequest?.needsFace && !bankerFaceYes)
     if (denied && !bankerRejectReason.trim()) {
@@ -151,8 +143,6 @@ const InfoLKModal = ({ lk, isOpen, onClose }) => {
     setLoading(true)
     const result = await respondOperatorRequest(lk.id, bankerName, {
       waitlistApproved: bankerWaitlistYes,
-      stopApproved: bankerStopYes,
-      blockApproved: bankerBlockYes,
       unblockApproved: bankerUnblockYes,
       faceApproved: bankerFaceYes,
       rejectionReason: bankerRejectReason,
@@ -261,30 +251,18 @@ const InfoLKModal = ({ lk, isOpen, onClose }) => {
           {showOperatorForm && (
             <div className="info-section">
               <h3>Запрос банкиру</h3>
-              <p className="section-hint">Выберите действие — банкир подтвердит в Telegram</p>
+              <p className="section-hint">Вайт или разблок — банкир подтвердит, в Telegram придёт сразу</p>
               <div className="operator-checkboxes">
                 {!lk.inWaitlist && (
                   <label>
                     <input type="checkbox" checked={opNeedsWaitlist} onChange={(e) => setOpNeedsWaitlist(e.target.checked)} />
-                    📋 Поставить в вайт
-                  </label>
-                )}
-                {!lk.onStop && (
-                  <label>
-                    <input type="checkbox" checked={opNeedsStop} onChange={(e) => setOpNeedsStop(e.target.checked)} />
-                    🛑 Поставить на стоп
-                  </label>
-                )}
-                {!isBlocked && (
-                  <label>
-                    <input type="checkbox" checked={opNeedsBlock} onChange={(e) => setOpNeedsBlock(e.target.checked)} />
-                    🔒 Заблокировать
+                    📋 В вайт
                   </label>
                 )}
                 {isBlocked && (
                   <label>
                     <input type="checkbox" checked={opNeedsUnblock} onChange={(e) => setOpNeedsUnblock(e.target.checked)} />
-                    🔓 Разблокировать
+                    🔓 На разблок
                   </label>
                 )}
                 <label>
@@ -323,8 +301,6 @@ const InfoLKModal = ({ lk, isOpen, onClose }) => {
               <p className="request-message">
                 Оператор <strong>{opRequest.operator}</strong> запросил:
                 {opRequest.needsWaitlist && ' 📋 Вайт'}
-                {opRequest.needsStop && ' 🛑 Стоп'}
-                {opRequest.needsBlock && ' 🔒 Блок'}
                 {opRequest.needsUnblock && ' 🔓 Разблок'}
                 {opRequest.needsFace && ' 👤 Face ID'}
               </p>
@@ -337,20 +313,6 @@ const InfoLKModal = ({ lk, isOpen, onClose }) => {
                   <span>В вайт:</span>
                   <label><input type="radio" checked={bankerWaitlistYes} onChange={() => setBankerWaitlistYes(true)} /> Да</label>
                   <label><input type="radio" checked={!bankerWaitlistYes} onChange={() => setBankerWaitlistYes(false)} /> Нет</label>
-                </div>
-              )}
-              {opRequest.needsStop && (
-                <div className="banker-response-row">
-                  <span>На стоп:</span>
-                  <label><input type="radio" checked={bankerStopYes} onChange={() => setBankerStopYes(true)} /> Да</label>
-                  <label><input type="radio" checked={!bankerStopYes} onChange={() => setBankerStopYes(false)} /> Нет</label>
-                </div>
-              )}
-              {opRequest.needsBlock && (
-                <div className="banker-response-row">
-                  <span>Блок:</span>
-                  <label><input type="radio" checked={bankerBlockYes} onChange={() => setBankerBlockYes(true)} /> Да</label>
-                  <label><input type="radio" checked={!bankerBlockYes} onChange={() => setBankerBlockYes(false)} /> Нет</label>
                 </div>
               )}
               {opRequest.needsUnblock && (
@@ -388,8 +350,6 @@ const InfoLKModal = ({ lk, isOpen, onClose }) => {
               <h3>Запрос оператора — решён</h3>
               <p>Банкир: {opRequest.banker || '—'}</p>
               {opRequest.needsWaitlist && <p>Вайт: {opRequest.waitlistApproved ? '✅ Да' : '❌ Нет'}</p>}
-              {opRequest.needsStop && <p>Стоп: {opRequest.stopApproved ? '✅ Да' : '❌ Нет'}</p>}
-              {opRequest.needsBlock && <p>Блок: {opRequest.blockApproved ? '✅ Да' : '❌ Нет'}</p>}
               {opRequest.needsUnblock && <p>Разблок: {opRequest.unblockApproved ? '✅ Да' : '❌ Нет'}</p>}
               {opRequest.needsFace && <p>Face ID: {opRequest.faceApproved ? '✅ Снят' : '❌ Нет'}</p>}
               {opRequest.rejectionReason && <p>Причина: {opRequest.rejectionReason}</p>}

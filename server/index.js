@@ -25,6 +25,8 @@ import {
   isTelegramEnabled,
   formatLK,
   fetchTelegramChats,
+  formatOperatorRequestMessage,
+  formatOperatorApprovedMessage,
 } from './telegram.js'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -68,7 +70,12 @@ let users = loadUsers([
 let settings = loadSettings({ telegramChatId: process.env.TELEGRAM_CHAT_ID || '' })
 setDefaultChatId(settings.telegramChatId)
 
-initTelegram()
+initTelegram(async (chatId, title) => {
+  settings.telegramChatId = chatId
+  persistSettings()
+  addServerLog('Telegram подключён', `${title} (${chatId})`, 'bot')
+  console.log(`Telegram: чат подключён — ${title} (${chatId})`)
+})
 
 function persistState() {
   state.updatedAt = Date.now()
@@ -116,11 +123,9 @@ app.get('/api/state', (req, res) => {
 })
 
 app.post('/api/sync', (req, res) => {
-  const { rows, bankerRequests, raisedFromRest, operatorRequests, statusHistory, logs } = req.body || {}
+  const { rows, raisedFromRest, statusHistory, logs } = req.body || {}
   if (Array.isArray(rows)) state.rows = rows
-  if (bankerRequests && typeof bankerRequests === 'object') state.bankerRequests = bankerRequests
   if (raisedFromRest && typeof raisedFromRest === 'object') state.raisedFromRest = raisedFromRest
-  if (operatorRequests && typeof operatorRequests === 'object') state.operatorRequests = operatorRequests
   if (statusHistory && typeof statusHistory === 'object') state.statusHistory = statusHistory
   if (Array.isArray(logs)) state.logs = logs.slice(0, MAX_LOGS)
   persistState()
@@ -328,10 +333,8 @@ app.post('/api/lk/:id/waitlist', async (req, res) => {
   persistState()
   addServerLog(inWaitlist ? 'В вайте' : 'Не в вайте', formatLK(row), banker || '')
 
-  const status = inWaitlist ? '✅ В ВАЙТЕ' : '❌ НЕ В ВАЙТЕ'
-  await notifyTelegram(
-    `📋 <b>Банкир ${banker || '—'}</b>\n${status}\n👤 ${row.name || '—'}\n📞 ${row.phone || '—'}`
-  )
+  const status = inWaitlist ? 'в вайте' : 'не в вайте'
+  await notifyTelegram(formatOperatorApprovedMessage(status, row))
   res.json({ success: true })
 })
 
@@ -398,13 +401,67 @@ app.post('/api/lk/:id/operator-request', async (req, res) => {
   addServerLog('Запрос оператора', formatLK(row), operator || '')
 
   const parts = operatorRequestParts(newReq)
-  const amount = stuckAmount ? `\n💰 Застряло: <b>${stuckAmount}</b>` : ''
-  const noteText = note ? `\n📝 ${note}` : ''
+  const actionLabel = parts.length === 1
+    ? (newReq.needsWaitlist ? 'в вайт' : newReq.needsUnblock ? 'на разблок' : newReq.needsFace ? 'снять Face ID' : parts[0])
+    : parts.join(' + ')
 
-  await notifyTelegram(
-    `🔔 <b>Запрос оператора ${operator || '—'}</b>\n${parts.join(' + ')}\n👤 ${row.name || '—'}\n📞 ${row.phone || '—'}\n💳 ${row.card || '—'}${amount}${noteText}`
-  )
-  res.json({ success: true })
+  await notifyTelegram(formatOperatorRequestMessage(actionLabel, row))
+  res.json({ success: true, updatedAt: state.updatedAt })
+})
+
+app.post('/api/operator-request/bulk', async (req, res) => {
+  const { operator, action, ids } = req.body || {}
+  const idList = Array.isArray(ids) ? ids.map((x) => parseInt(x, 10)).filter(Boolean) : []
+  if (!idList.length) return res.status(400).json({ success: false, error: 'Выберите реквизиты' })
+  if (!['waitlist', 'unblock'].includes(action)) {
+    return res.status(400).json({ success: false, error: 'Действие: waitlist или unblock' })
+  }
+
+  const created = []
+  const skipped = []
+
+  for (const id of idList) {
+    const row = findRow(id)
+    if (!row) { skipped.push(id); continue }
+    if (state.operatorRequests?.[id]?.status === 'pending') { skipped.push(id); continue }
+    if (action === 'waitlist' && row.inWaitlist) { skipped.push(id); continue }
+    if (action === 'unblock' && (row.status || '').toLowerCase() !== 'блок') { skipped.push(id); continue }
+
+    const newReq = {
+      operator: operator || 'operator',
+      date: new Date().toISOString(),
+      status: 'pending',
+      needsWaitlist: action === 'waitlist',
+      needsStop: false,
+      needsBlock: false,
+      needsUnblock: action === 'unblock',
+      needsFace: false,
+      stuckAmount: '',
+      note: '',
+      waitlistApproved: null,
+      stopApproved: null,
+      blockApproved: null,
+      unblockApproved: null,
+      faceApproved: null,
+      rejectionReason: '',
+      banker: '',
+      resolvedDate: null,
+    }
+    state.operatorRequests = { ...state.operatorRequests, [id]: newReq }
+    created.push(row)
+  }
+
+  if (!created.length) {
+    return res.status(400).json({ success: false, error: 'Нет подходящих реквизитов для запроса' })
+  }
+
+  persistState()
+  addServerLog(`Массовый запрос: ${action}`, `${created.length} шт.`, operator || '')
+
+  const label = action === 'waitlist' ? 'в вайт' : 'на разблок'
+  await notifyTelegram(formatOperatorRequestMessage(label, created))
+
+  res.json({ success: true, count: created.length, skipped: skipped.length, updatedAt: state.updatedAt })
 })
 
 app.post('/api/lk/:id/operator-response', async (req, res) => {
@@ -448,16 +505,17 @@ app.post('/api/lk/:id/operator-response', async (req, res) => {
   persistState()
   addServerLog('Ответ банкира на запрос', formatLK(row), banker || '')
 
-  const lines = [`🏦 <b>Банкир ${banker || '—'}</b>`, `👤 ${row.name || '—'}`, `📞 ${row.phone || '—'}`]
-  if (request.needsWaitlist) lines.push(waitlistApproved ? '📋 Вайт: ✅ ДА' : '📋 Вайт: ❌ НЕТ')
-  if (request.needsStop) lines.push(stopApproved ? '🛑 Стоп: ✅ ДА' : '🛑 Стоп: ❌ НЕТ')
-  if (request.needsBlock) lines.push(blockApproved ? '🔒 Блок: ✅ ДА' : '🔒 Блок: ❌ НЕТ')
-  if (request.needsUnblock) lines.push(unblockApproved ? '🔓 Разблок: ✅ ДА' : '🔓 Разблок: ❌ НЕТ')
-  if (request.needsFace) lines.push(faceApproved ? '👤 Face ID: ✅ СНЯТ' : '👤 Face ID: ❌ НЕТ')
-  if (rejectionReason) lines.push(`❗ Причина отказа: ${rejectionReason}`)
+  if (waitlistApproved && request.needsWaitlist) {
+    await notifyTelegram(formatOperatorApprovedMessage('в вайте', rowUpdates))
+  }
+  if (unblockApproved && request.needsUnblock) {
+    await notifyTelegram(formatOperatorApprovedMessage('разблокирован', rowUpdates))
+  }
+  if (stopApproved && request.needsStop) {
+    await notifyTelegram(formatOperatorApprovedMessage('на стопе', rowUpdates))
+  }
 
-  await notifyTelegram(lines.join('\n'))
-  res.json({ success: true })
+  res.json({ success: true, updatedAt: state.updatedAt })
 })
 
 app.post('/api/telegram/test', async (req, res) => {

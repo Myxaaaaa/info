@@ -120,9 +120,7 @@ export const DataProvider = ({ children }) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           rows: snap.rows,
-          bankerRequests: snap.bankerRequests,
           raisedFromRest: snap.raisedFromRest,
-          operatorRequests: snap.operatorRequests,
           statusHistory: snap.statusHistory,
         }),
       })
@@ -189,11 +187,6 @@ export const DataProvider = ({ children }) => {
     localStorage.setItem(OPERATOR_REQUESTS_KEY, JSON.stringify(data))
   }
 
-  const saveOperatorRequests = (data) => {
-    applyOperatorRequests(data)
-    scheduleServerPush()
-  }
-
   const applyRaised = (data) => {
     setRaisedFromRest(data)
     localStorage.setItem(RAISED_KEY, JSON.stringify(data))
@@ -221,7 +214,6 @@ export const DataProvider = ({ children }) => {
 
   const saveRequests = (newRequests) => {
     applyRequests(newRequests)
-    scheduleServerPush()
   }
 
   const applyRows = (newRows) => {
@@ -230,15 +222,33 @@ export const DataProvider = ({ children }) => {
   }
 
   const applyServerState = useCallback((data) => {
+    // Запросы — только с сервера (API), иначе затираются при sync
+    if (data.operatorRequests) applyOperatorRequests(data.operatorRequests)
+    if (data.bankerRequests) applyRequests(data.bankerRequests)
+
     if (hasUnsyncedChangesRef.current) return
     const serverTs = data.updatedAt || 0
     if (serverTs && serverTs <= lastServerUpdatedAt.current) return
     lastServerUpdatedAt.current = serverTs || Date.now()
     if (data.rows?.length) applyRows(data.rows)
-    if (data.bankerRequests) applyRequests(data.bankerRequests)
     if (data.raisedFromRest) applyRaised(data.raisedFromRest)
-    if (data.operatorRequests) applyOperatorRequests(data.operatorRequests)
     if (data.statusHistory) applyHistory(data.statusHistory)
+  }, [])
+
+  const pullStateFromServer = useCallback(async () => {
+    try {
+      const res = await fetch('/api/state')
+      const data = await res.json()
+      if (data.updatedAt) lastServerUpdatedAt.current = data.updatedAt
+      if (data.operatorRequests) applyOperatorRequests(data.operatorRequests)
+      if (data.bankerRequests) applyRequests(data.bankerRequests)
+      if (data.rows?.length) applyRows(data.rows)
+      if (data.raisedFromRest) applyRaised(data.raisedFromRest)
+      if (data.statusHistory) applyHistory(data.statusHistory)
+      return { success: true }
+    } catch {
+      return { success: false }
+    }
   }, [])
 
   const updateStatus = (id, newStatus, changedBy = 'user') => {
@@ -560,14 +570,12 @@ export const DataProvider = ({ children }) => {
   const requestOperatorAction = async (id, operatorName, payload) => {
     const {
       needsWaitlist,
-      needsStop,
-      needsBlock,
       needsUnblock,
       needsFace,
       stuckAmount,
       note,
     } = payload || {}
-    const hasNeed = needsWaitlist || needsStop || needsBlock || needsUnblock || needsFace
+    const hasNeed = needsWaitlist || needsUnblock || needsFace
     if (!hasNeed) {
       return { success: false, error: 'Выберите хотя бы один тип запроса' }
     }
@@ -582,8 +590,6 @@ export const DataProvider = ({ children }) => {
         body: JSON.stringify({
           operator: operatorName,
           needsWaitlist,
-          needsStop,
-          needsBlock,
           needsUnblock,
           needsFace,
           stuckAmount,
@@ -592,29 +598,29 @@ export const DataProvider = ({ children }) => {
       })
       const data = await res.json()
       if (!res.ok || !data.success) return { success: false, error: data.error || 'Ошибка' }
-      const newReq = {
-        operator: operatorName,
-        date: new Date().toISOString(),
-        status: 'pending',
-        needsWaitlist: !!needsWaitlist,
-        needsStop: !!needsStop,
-        needsBlock: !!needsBlock,
-        needsUnblock: !!needsUnblock,
-        needsFace: !!needsFace,
-        stuckAmount: stuckAmount || '',
-        note: note || '',
-        waitlistApproved: null,
-        stopApproved: null,
-        blockApproved: null,
-        unblockApproved: null,
-        faceApproved: null,
-        rejectionReason: '',
-        banker: '',
-        resolvedDate: null,
-      }
-      saveOperatorRequests({ ...operatorRequests, [id]: newReq })
+      if (data.updatedAt) lastServerUpdatedAt.current = data.updatedAt
+      await pullStateFromServer()
       addLog('Запрос оператора', `#${id}`, operatorName)
       return { success: true }
+    } catch {
+      return { success: false, error: 'Сервер недоступен' }
+    }
+  }
+
+  const bulkRequestOperatorAction = async (ids, operatorName, action) => {
+    if (!ids?.length) return { success: false, error: 'Выберите реквизиты' }
+    try {
+      const res = await fetch('/api/operator-request/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ operator: operatorName, action, ids }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.success) return { success: false, error: data.error || 'Ошибка' }
+      if (data.updatedAt) lastServerUpdatedAt.current = data.updatedAt
+      await pullStateFromServer()
+      addLog(`Массовый запрос: ${action}`, `${data.count} шт.`, operatorName)
+      return { success: true, count: data.count, skipped: data.skipped }
     } catch {
       return { success: false, error: 'Сервер недоступен' }
     }
@@ -649,45 +655,8 @@ export const DataProvider = ({ children }) => {
       })
       const data = await res.json()
       if (!res.ok || !data.success) return { success: false, error: data.error || 'Ошибка' }
-      const updated = {
-        ...request,
-        status: 'resolved',
-        banker: bankerName,
-        waitlistApproved: request.needsWaitlist ? !!waitlistApproved : null,
-        stopApproved: request.needsStop ? !!stopApproved : null,
-        blockApproved: request.needsBlock ? !!blockApproved : null,
-        unblockApproved: request.needsUnblock ? !!unblockApproved : null,
-        faceApproved: request.needsFace ? !!faceApproved : null,
-        rejectionReason: rejectionReason || '',
-        resolvedDate: new Date().toISOString(),
-      }
-      saveOperatorRequests({ ...operatorRequests, [id]: updated })
-
-      const row = rows.find((r) => r.id === id)
-      if (row) {
-        let next = { ...row }
-        if (waitlistApproved && request.needsWaitlist) next = { ...next, inWaitlist: true }
-        if (stopApproved && request.needsStop) next = { ...next, onStop: true }
-        if (blockApproved && request.needsBlock) next = { ...next, status: 'блок' }
-        if (unblockApproved && request.needsUnblock) next = { ...next, status: 'актив' }
-        if (next.status !== row.status) {
-          const history = statusHistory[id] || []
-          saveHistory({
-            ...statusHistory,
-            [id]: [
-              ...history,
-              {
-                from: row.status || '',
-                to: next.status,
-                date: new Date().toISOString(),
-                changedBy: 'banker',
-              },
-            ],
-          })
-        }
-        saveData(rows.map((r) => (r.id === id ? next : r)))
-      }
-
+      if (data.updatedAt) lastServerUpdatedAt.current = data.updatedAt
+      await pullStateFromServer()
       addLog('Ответ на запрос оператора', `#${id}`, bankerName)
       return { success: true }
     } catch {
@@ -826,6 +795,7 @@ export const DataProvider = ({ children }) => {
     setLKStop,
     setLKWaitlist,
     requestOperatorAction,
+    bulkRequestOperatorAction,
     requestOperatorUnblock: requestOperatorAction,
     respondOperatorRequest,
     isRestStatus,

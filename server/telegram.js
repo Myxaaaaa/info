@@ -65,12 +65,16 @@ function wireCommands(onConnect) {
   })
 }
 
-export async function initTelegram(onConnect) {
+export async function initTelegram(onConnect, options = {}) {
   const token = (process.env.BOT_TOKEN || '').trim()
   if (!token) {
-    console.log('Telegram: BOT_TOKEN не задан — бот отключён')
+    console.log('Telegram: BOT_TOKEN не задан — задай переменную на Railway или в .env')
     return null
   }
+
+  const enablePolling = options.enablePolling !== false && options.enablePolling !== true
+    ? !defaultChatId
+    : !!options.enablePolling
 
   try {
     const probe = new TelegramBot(token, { polling: false })
@@ -81,12 +85,16 @@ export async function initTelegram(onConnect) {
 
     await probe.deleteWebHook({ drop_pending_updates: true })
 
-    bot = new TelegramBot(token, {
-      polling: { interval: 1000, autoStart: true, params: { timeout: 10 } },
-    })
+    bot = new TelegramBot(token, { polling: false })
 
-    wireCommands(onConnect)
-    console.log('Telegram: polling запущен — пиши /connect в группе')
+    if (enablePolling) {
+      await bot.startPolling({ interval: 1000, params: { timeout: 10 } })
+      wireCommands(onConnect)
+      console.log('Telegram: polling вкл — /connect в группе для привязки')
+    } else {
+      console.log(`Telegram: только отправка → chat ${defaultChatId || '(не задан!)'}`)
+    }
+
     return bot
   } catch (e) {
     tokenValid = false
@@ -118,7 +126,9 @@ export function getTelegramStatus() {
     enabled: isTelegramEnabled(),
     tokenValid,
     botUsername,
-    chatId: defaultChatId || '',
+    chatId: defaultChatId || process.env.TELEGRAM_CHAT_ID || '',
+    hasToken: !!(process.env.BOT_TOKEN || '').trim(),
+    canSend: isTelegramEnabled() && !!(defaultChatId || process.env.TELEGRAM_CHAT_ID),
   }
 }
 
@@ -179,7 +189,7 @@ export async function sendTelegram(text, chatId) {
         : 'BOT_TOKEN неверный — обнови в .env и перезапусти сервер',
     }
   }
-  const target = String(chatId || defaultChatId || '').trim()
+  const target = String(chatId || defaultChatId || process.env.TELEGRAM_CHAT_ID || '').trim()
   if (!target) {
     return { success: false, error: 'Чат не подключён. В группе напиши боту /connect' }
   }

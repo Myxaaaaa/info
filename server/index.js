@@ -16,7 +16,7 @@ if (existsSync(__envPath)) {
   })
 }
 import { INITIAL_DATA } from '../src/data/tableData.js'
-import { loadState, saveState, loadUsers, saveUsers, loadSettings, saveSettings } from './persistence.js'
+import { loadState, saveState, loadUsers, saveUsers, loadSettings, saveSettings, DATA_DIR } from './persistence.js'
 import {
   initTelegram,
   sendTelegram,
@@ -70,16 +70,38 @@ let users = loadUsers([
 ])
 
 let settings = loadSettings({ telegramChatId: process.env.TELEGRAM_CHAT_ID || '' })
-setDefaultChatId(settings.telegramChatId)
+
+function bootstrapTelegramSettings() {
+  const envChat = (process.env.TELEGRAM_CHAT_ID || '').trim()
+  if (envChat) {
+    settings.telegramChatId = envChat
+    saveSettings(settings)
+  }
+  setDefaultChatId(settings.telegramChatId || envChat)
+}
+
+bootstrapTelegramSettings()
+
+const hasTelegramChat = !!(settings.telegramChatId || process.env.TELEGRAM_CHAT_ID)
 
 initTelegram(async (chatId, title) => {
   settings.telegramChatId = chatId
   persistSettings()
   addServerLog('Telegram подключён', `${title} (${chatId})`, 'bot')
   console.log(`Telegram: чат подключён — ${title} (${chatId})`)
-}).then((tg) => {
-  if (tg) console.log('Telegram: enabled')
-  else console.log('Telegram: disabled (проверь BOT_TOKEN в .env)')
+}, { enablePolling: !hasTelegramChat }).then((tg) => {
+  const st = getTelegramStatus()
+  console.log('Telegram boot:', {
+    hasToken: st.hasToken,
+    tokenValid: st.tokenValid,
+    bot: st.botUsername || '—',
+    chatId: st.chatId || 'НЕ ЗАДАН',
+    canSend: st.canSend,
+    dataDir: process.env.DATA_DIR || 'server/data',
+  })
+  if (tg && st.canSend) console.log('Telegram: ready')
+  else if (tg && !st.canSend) console.log('Telegram: задай TELEGRAM_CHAT_ID на Railway или /connect в группе')
+  else console.log('Telegram: disabled — проверь BOT_TOKEN на Railway')
 })
 
 function persistState() {
@@ -109,10 +131,14 @@ function addServerLog(action, details = '', userId = '') {
 }
 
 async function notifyTelegram(text, chatId) {
-  const target = chatId || settings.telegramChatId || getDefaultChatId()
+  const target =
+    chatId ||
+    settings.telegramChatId ||
+    process.env.TELEGRAM_CHAT_ID ||
+    getDefaultChatId()
   const result = await sendTelegram(text, target)
   if (!result.success) {
-    console.error('Telegram notify failed:', result.error, '| chat:', target)
+    console.error('Telegram notify failed:', result.error, '| chat:', target || '(пусто)')
   }
   return result
 }
@@ -193,10 +219,25 @@ app.get('/api/rows_by_status', (req, res) => {
 app.get('/api/settings', (req, res) => {
   const tg = getTelegramStatus()
   res.json({
-    telegramChatId: settings.telegramChatId,
+    telegramChatId: settings.telegramChatId || process.env.TELEGRAM_CHAT_ID || '',
     telegramEnabled: tg.enabled,
+    telegramCanSend: tg.canSend,
     telegramBotUsername: tg.botUsername,
     telegramTokenValid: tg.tokenValid,
+    telegramHasToken: tg.hasToken,
+  })
+})
+
+app.get('/api/telegram/diagnostics', (req, res) => {
+  const tg = getTelegramStatus()
+  res.json({
+    ...tg,
+    dataDir: DATA_DIR,
+    hint: !tg.hasToken
+      ? 'Задай BOT_TOKEN в Railway → Variables'
+      : !tg.canSend
+        ? 'Задай TELEGRAM_CHAT_ID=-1003849378994 в Railway → Variables'
+        : 'OK — уведомления должны работать',
   })
 })
 

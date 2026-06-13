@@ -139,7 +139,7 @@ export function explainTelegramError(message = '') {
   return msg || 'Неизвестная ошибка Telegram'
 }
 
-/** Формат: "в вайт\nИмя\tтелефон" */
+/** ФИО + таб + телефон */
 export function formatLKLine(row) {
   if (!row) return '—\t—'
   const name = (row.name || '—').trim()
@@ -147,14 +147,27 @@ export function formatLKLine(row) {
   return `${name}\t${phone}`
 }
 
+/** Запрос оператора: заголовок сверху, реквизиты ниже */
 export function formatOperatorRequestMessage(action, rows) {
   const list = Array.isArray(rows) ? rows : [rows]
   const lines = list.map((r) => formatLKLine(r))
   return `${action}\n${lines.join('\n')}`
 }
 
+/** Результат: ФИО + телефон, статус снизу */
+export function formatTelegramResult(rows, statusLine) {
+  const list = Array.isArray(rows) ? rows : [rows]
+  const body = list.map((r) => formatLKLine(r)).join('\n')
+  return `${body}\n\n${statusLine}`
+}
+
 export function formatOperatorApprovedMessage(action, rows) {
-  return formatOperatorRequestMessage(action, rows)
+  return formatTelegramResult(rows, action)
+}
+
+export function formatOperatorDeniedMessage(action, rows, reason = '') {
+  const line = reason ? `отказано — ${action}\n${reason}` : `отказано — ${action}`
+  return formatTelegramResult(rows, line)
 }
 
 export async function sendTelegram(text, chatId) {

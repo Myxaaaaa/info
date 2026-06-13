@@ -28,6 +28,7 @@ import {
   fetchTelegramChats,
   formatOperatorRequestMessage,
   formatOperatorApprovedMessage,
+  formatTelegramResult,
 } from './telegram.js'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -109,7 +110,11 @@ function addServerLog(action, details = '', userId = '') {
 
 async function notifyTelegram(text, chatId) {
   const target = chatId || settings.telegramChatId || getDefaultChatId()
-  return sendTelegram(text, target)
+  const result = await sendTelegram(text, target)
+  if (!result.success) {
+    console.error('Telegram notify failed:', result.error, '| chat:', target)
+  }
+  return result
 }
 
 function findRow(id) {
@@ -322,11 +327,8 @@ app.post('/api/lk/:id/stop', async (req, res) => {
   persistState()
   addServerLog(onStop ? 'Стоп реквизит' : 'Снят со стопа', formatLK(row), banker || '')
 
-  const icon = onStop ? '🛑' : '✅'
-  const action = onStop ? 'СТОП' : 'снят со СТОПА'
-  await notifyTelegram(
-    `${icon} <b>Банкир ${banker || '—'}</b>\n${action}\n👤 ${row.name || '—'}\n📞 ${row.phone || '—'}\n💳 ${row.card || '—'}`
-  )
+  const action = onStop ? 'на стопе' : 'снят со стопа'
+  await notifyTelegram(formatTelegramResult(row, action))
   res.json({ success: true })
 })
 
@@ -340,8 +342,8 @@ app.post('/api/lk/:id/waitlist', async (req, res) => {
   persistState()
   addServerLog(inWaitlist ? 'В вайте' : 'Не в вайте', formatLK(row), banker || '')
 
-  const status = inWaitlist ? 'в вайте' : 'не в вайте'
-  await notifyTelegram(formatOperatorApprovedMessage(status, row))
+  const status = inWaitlist ? 'в вайте' : 'убран из вайта'
+  await notifyTelegram(formatTelegramResult(row, status))
   res.json({ success: true })
 })
 
@@ -512,14 +514,28 @@ app.post('/api/lk/:id/operator-response', async (req, res) => {
   persistState()
   addServerLog('Ответ банкира на запрос', formatLK(row), banker || '')
 
-  if (waitlistApproved && request.needsWaitlist) {
-    await notifyTelegram(formatOperatorApprovedMessage('в вайте', rowUpdates))
+  const statusLines = []
+  if (request.needsWaitlist) {
+    statusLines.push(waitlistApproved ? 'в вайте' : 'отказано — вайт')
   }
-  if (unblockApproved && request.needsUnblock) {
-    await notifyTelegram(formatOperatorApprovedMessage('разблокирован', rowUpdates))
+  if (request.needsUnblock) {
+    statusLines.push(unblockApproved ? 'разблокирован' : 'отказано — разблок')
   }
-  if (stopApproved && request.needsStop) {
-    await notifyTelegram(formatOperatorApprovedMessage('на стопе', rowUpdates))
+  if (request.needsFace) {
+    statusLines.push(faceApproved ? 'снят Face ID' : 'отказано — Face ID')
+  }
+  if (request.needsStop) {
+    statusLines.push(stopApproved ? 'на стопе' : 'отказано — стоп')
+  }
+  if (request.needsBlock) {
+    statusLines.push(blockApproved ? 'заблокирован' : 'отказано — блок')
+  }
+  if (rejectionReason && statusLines.some((s) => s.startsWith('отказано'))) {
+    statusLines.push(rejectionReason)
+  }
+
+  if (statusLines.length) {
+    await notifyTelegram(formatTelegramResult(rowUpdates, statusLines.join('\n')))
   }
 
   res.json({ success: true, updatedAt: state.updatedAt })
@@ -528,7 +544,10 @@ app.post('/api/lk/:id/operator-response', async (req, res) => {
 app.post('/api/telegram/test', async (req, res) => {
   const { chatId } = req.body || {}
   const result = await notifyTelegram(
-    '✅ <b>MBank ЛК</b>\nТест — бот подключён и работает.',
+    formatTelegramResult(
+      { name: 'Тест', phone: '000 000 000' },
+      'тест — бот работает'
+    ),
     chatId
   )
   if (!result.success) return res.status(500).json(result)

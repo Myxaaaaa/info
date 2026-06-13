@@ -11,7 +11,7 @@ if (existsSync(__envPath)) {
     const eq = trimmed.indexOf('=')
     if (eq === -1) return
     const key = trimmed.slice(0, eq).trim()
-    const val = trimmed.slice(eq + 1).trim()
+    const val = trimmed.slice(eq + 1).trim().replace(/^["']|["']$/g, '')
     if (key && process.env[key] === undefined) process.env[key] = val
   })
 }
@@ -23,6 +23,7 @@ import {
   setDefaultChatId,
   getDefaultChatId,
   isTelegramEnabled,
+  getTelegramStatus,
   formatLK,
   fetchTelegramChats,
   formatOperatorRequestMessage,
@@ -75,6 +76,9 @@ initTelegram(async (chatId, title) => {
   persistSettings()
   addServerLog('Telegram подключён', `${title} (${chatId})`, 'bot')
   console.log(`Telegram: чат подключён — ${title} (${chatId})`)
+}).then((tg) => {
+  if (tg) console.log('Telegram: enabled')
+  else console.log('Telegram: disabled (проверь BOT_TOKEN в .env)')
 })
 
 function persistState() {
@@ -182,9 +186,12 @@ app.get('/api/rows_by_status', (req, res) => {
 // ========== Settings ==========
 
 app.get('/api/settings', (req, res) => {
+  const tg = getTelegramStatus()
   res.json({
     telegramChatId: settings.telegramChatId,
-    telegramEnabled: isTelegramEnabled(),
+    telegramEnabled: tg.enabled,
+    telegramBotUsername: tg.botUsername,
+    telegramTokenValid: tg.tokenValid,
   })
 })
 

@@ -2,50 +2,101 @@ import TelegramBot from 'node-telegram-bot-api'
 
 let bot = null
 let defaultChatId = process.env.TELEGRAM_CHAT_ID || ''
+let botUsername = ''
+let tokenValid = false
 
-export function initTelegram(onConnect) {
-  const token = process.env.BOT_TOKEN
+const CMD_RE = /^\/(connect|start|link|status)(@[\w_]+)?(\s|$)/i
+
+async function reply(chatId, text) {
+  if (!bot) return
+  await bot.sendMessage(chatId, text, { parse_mode: 'HTML' })
+}
+
+function wireCommands(onConnect) {
+  bot.on('message', async (msg) => {
+    const text = (msg.text || '').trim()
+    if (!text.startsWith('/')) return
+
+    const m = text.match(CMD_RE)
+    if (!m) return
+
+    const cmd = m[1].toLowerCase()
+    const chatId = String(msg.chat.id)
+    const title = msg.chat.title || msg.from?.first_name || msg.from?.username || 'чат'
+
+    if (cmd === 'status') {
+      const linked = defaultChatId
+        ? `✅ Активный чат: <code>${defaultChatId}</code>`
+        : '⚠️ Чат не привязан — напиши /connect'
+      await reply(
+        msg.chat.id,
+        `🤖 <b>MBank ЛК</b>\n${linked}\nЭтот чат: <code>${chatId}</code>\nБот: @${botUsername || '—'}`
+      )
+      return
+    }
+
+    // connect / start / link
+    if (onConnect) {
+      try {
+        await onConnect(chatId, title)
+        setDefaultChatId(chatId)
+      } catch (e) {
+        console.error('Telegram connect error:', e.message)
+      }
+    }
+    const isGroup = msg.chat.type === 'group' || msg.chat.type === 'supergroup'
+    const hint = isGroup
+      ? 'Группа подключена — уведомления о запросах будут приходить сюда.'
+      : 'Чат подключен — уведомления будут приходить сюда.'
+    await reply(
+      msg.chat.id,
+      `✅ <b>MBank ЛК подключён</b>\n\n${hint}\n\nChat ID: <code>${chatId}</code>\n\n/connect — привязать этот чат\n/status — проверить связь`
+    )
+  })
+
+  bot.on('polling_error', (err) => {
+    const msg = err?.message || String(err)
+    if (msg.includes('401')) {
+      tokenValid = false
+      console.error('Telegram: токен неверный (401). Обнови BOT_TOKEN в .env и перезапусти сервер.')
+    } else {
+      console.error('Telegram polling error:', msg)
+    }
+  })
+}
+
+export async function initTelegram(onConnect) {
+  const token = (process.env.BOT_TOKEN || '').trim()
   if (!token) {
     console.log('Telegram: BOT_TOKEN не задан — бот отключён')
     return null
   }
+
   try {
-    bot = new TelegramBot(token, { polling: true })
-    console.log('Telegram: бот подключён (polling)')
+    const probe = new TelegramBot(token, { polling: false })
+    const me = await probe.getMe()
+    botUsername = me.username || ''
+    tokenValid = true
+    console.log(`Telegram: токен OK — @${botUsername}`)
 
-    bot.onText(/\/(connect|start|link)(@\w+)?$/i, async (msg) => {
-      const chatId = String(msg.chat.id)
-      const title = msg.chat.title || msg.from?.first_name || msg.from?.username || 'чат'
-      if (onConnect) {
-        try {
-          await onConnect(chatId, title)
-        } catch (e) {
-          console.error('Telegram connect error:', e.message)
-        }
-      }
-      const isGroup = msg.chat.type === 'group' || msg.chat.type === 'supergroup'
-      const hint = isGroup
-        ? 'Группа подключена — уведомления о запросах будут приходить сюда.'
-        : 'Личный чат подключен — уведомления будут приходить сюда.'
-      await bot.sendMessage(
-        msg.chat.id,
-        `✅ <b>MBank ЛК подключён</b>\n\n${hint}\n\nChat ID: <code>${chatId}</code>\n\nКоманды:\n/connect — подключить этот чат\n/status — проверить связь`,
-        { parse_mode: 'HTML' }
-      )
+    await probe.deleteWebHook({ drop_pending_updates: true })
+
+    bot = new TelegramBot(token, {
+      polling: { interval: 1000, autoStart: true, params: { timeout: 10 } },
     })
 
-    bot.onText(/\/status(@\w+)?$/i, async (msg) => {
-      const linked = defaultChatId ? `✅ Активный чат: <code>${defaultChatId}</code>` : '⚠️ Чат ещё не привязан — напиши /connect'
-      await bot.sendMessage(
-        msg.chat.id,
-        `🤖 <b>MBank ЛК бот</b>\n${linked}\nТекущий чат: <code>${msg.chat.id}</code>`,
-        { parse_mode: 'HTML' }
-      )
-    })
-
+    wireCommands(onConnect)
+    console.log('Telegram: polling запущен — пиши /connect в группе')
     return bot
   } catch (e) {
-    console.error('Telegram init error:', e.message)
+    tokenValid = false
+    const msg = e.message || String(e)
+    if (msg.includes('401') || /unauthorized/i.test(msg)) {
+      console.error('Telegram: BOT_TOKEN неверный (401). Получи новый у @BotFather → /mybots → API Token → Revoke')
+    } else {
+      console.error('Telegram init error:', msg)
+    }
+    bot = null
     return null
   }
 }
@@ -59,7 +110,16 @@ export function getDefaultChatId() {
 }
 
 export function isTelegramEnabled() {
-  return !!bot
+  return !!bot && tokenValid
+}
+
+export function getTelegramStatus() {
+  return {
+    enabled: isTelegramEnabled(),
+    tokenValid,
+    botUsername,
+    chatId: defaultChatId || '',
+  }
 }
 
 export function explainTelegramError(message = '') {
@@ -74,7 +134,7 @@ export function explainTelegramError(message = '') {
     return 'Чат не найден. Добавь бота в группу и напиши /connect'
   }
   if (msg.includes('chat_id')) {
-    return 'Чат не подключён. В группе напиши боту /connect'
+    return 'Чат не подключён. В группе напиши /connect'
   }
   return msg || 'Неизвестная ошибка Telegram'
 }
@@ -98,10 +158,17 @@ export function formatOperatorApprovedMessage(action, rows) {
 }
 
 export async function sendTelegram(text, chatId) {
-  if (!bot) return { success: false, error: 'Бот не настроен — задай BOT_TOKEN в .env и перезапусти сервер' }
+  if (!isTelegramEnabled()) {
+    return {
+      success: false,
+      error: tokenValid
+        ? 'Бот не запущен'
+        : 'BOT_TOKEN неверный — обнови в .env и перезапусти сервер',
+    }
+  }
   const target = String(chatId || defaultChatId || '').trim()
   if (!target) {
-    return { success: false, error: 'Чат не подключён. Добавь бота в группу и напиши /connect' }
+    return { success: false, error: 'Чат не подключён. В группе напиши боту /connect' }
   }
   try {
     await bot.sendMessage(target, text)
@@ -114,7 +181,9 @@ export async function sendTelegram(text, chatId) {
 }
 
 export async function fetchTelegramChats() {
-  if (!bot) return { success: false, error: 'Бот не настроен' }
+  if (!isTelegramEnabled()) {
+    return { success: false, error: 'Бот не настроен или токен неверный' }
+  }
   try {
     const updates = await bot.getUpdates({ limit: 50 })
     const seen = new Map()

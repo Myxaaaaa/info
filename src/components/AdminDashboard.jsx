@@ -209,7 +209,10 @@ const AdminDashboard = () => {
                 Нужен рабочий <code>BOT_TOKEN</code> в <code>.env</code>.
               </p>
               <p className={`admin-hint ${telegramEnabled ? 'form-success' : 'form-error'}`}>
-                Статус бота: {telegramEnabled ? '✅ токен загружен' : '❌ нет BOT_TOKEN в .env — перезапусти сервер после добавления'}
+                Статус бота: {telegramEnabled ? '✅ работает (polling)' : '❌ не работает — обнови BOT_TOKEN в .env и перезапусти сервер'}
+              </p>
+              <p className="admin-hint">
+                В группе: добавь бота → напиши <code>/connect</code> или <code>/connect@имя_бота</code>
               </p>
               <div className="admin-form-row">
                 <div className="form-group">

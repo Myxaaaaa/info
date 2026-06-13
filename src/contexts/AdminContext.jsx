@@ -20,6 +20,9 @@ export const AdminProvider = ({ children }) => {
           localStorage.setItem(TELEGRAM_CHAT_KEY, data.telegramChatId)
         }
         setTelegramEnabled(!!data.telegramEnabled)
+        if (data.telegramBotUsername && !data.telegramEnabled) {
+          console.warn('Telegram: токен невалидный')
+        }
       })
       .catch(() => {
         const saved = localStorage.getItem(TELEGRAM_CHAT_KEY)

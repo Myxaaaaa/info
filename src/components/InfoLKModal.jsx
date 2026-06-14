@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { useData } from '../contexts/DataContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useStatusSettings } from '../contexts/StatusSettingsContext'
+import { isBlockStatus } from '../utils/statusUtils.js'
 import ReRaiseModal from './ReRaiseModal'
 import './InfoLKModal.css'
 
@@ -20,6 +21,8 @@ const InfoLKModal = ({ lk, isOpen, onClose }) => {
     setLKWaitlist,
     requestOperatorAction,
     respondOperatorRequest,
+    getBlockReasonRequest,
+    respondBlockReasonRequest,
   } = useData()
   const { user, canBanker, canOperator } = useAuth()
   const { getStatusStyle, getStatusLabel } = useStatusSettings()
@@ -35,6 +38,7 @@ const InfoLKModal = ({ lk, isOpen, onClose }) => {
   const [bankerWaitlistYes, setBankerWaitlistYes] = useState(true)
   const [bankerUnblockYes, setBankerUnblockYes] = useState(true)
   const [bankerFaceYes, setBankerFaceYes] = useState(true)
+  const [blockReason, setBlockReason] = useState('')
   const [loading, setLoading] = useState(false)
 
   if (!isOpen || !lk) return null
@@ -42,9 +46,10 @@ const InfoLKModal = ({ lk, isOpen, onClose }) => {
   const history = getLKHistory(lk.id)
   const request = getBankerRequest(lk.id)
   const opRequest = getOperatorRequest(lk.id)
+  const blockRequest = getBlockReasonRequest(lk.id)
   const raisedDate = getRaisedFromRestDate(lk.id)
   const canRequestRest = canBanker && isRestStatus(lk.status)
-  const isBlocked = (lk.status || '').toLowerCase() === 'блок'
+  const isBlocked = isBlockStatus(lk.status)
   const showOperatorForm = canOperator && !canBanker && (!opRequest || opRequest.status !== 'pending')
 
   const formatDate = (dateString) => {
@@ -150,6 +155,37 @@ const InfoLKModal = ({ lk, isOpen, onClose }) => {
     setLoading(false)
     if (result.success) {
       alert('Ответ отправлен')
+      onClose()
+    } else {
+      alert(result.error || 'Ошибка')
+    }
+  }
+
+  const handleBlockReasonClarify = async () => {
+    if (!blockReason.trim()) {
+      alert('Укажите причину блока')
+      return
+    }
+    setLoading(true)
+    const result = await respondBlockReasonRequest(lk.id, bankerName, {
+      action: 'clarify',
+      reason: blockReason,
+    })
+    setLoading(false)
+    if (result.success) {
+      alert('Причина отправлена в Telegram')
+      onClose()
+    } else {
+      alert(result.error || 'Ошибка')
+    }
+  }
+
+  const handleBlockUnblock = async () => {
+    setLoading(true)
+    const result = await respondBlockReasonRequest(lk.id, bankerName, { action: 'unblock' })
+    setLoading(false)
+    if (result.success) {
+      alert('Разблокировано, уведомление отправлено')
       onClose()
     } else {
       alert(result.error || 'Ошибка')
@@ -291,6 +327,43 @@ const InfoLKModal = ({ lk, isOpen, onClose }) => {
               <button className="btn-banker-request" onClick={handleOperatorRequest} disabled={loading}>
                 Отправить запрос банкиру
               </button>
+            </div>
+          )}
+
+          {/* Банкир: уточнение причины блок/заява */}
+          {canBanker && blockRequest?.status === 'pending' && (
+            <div className="info-section operator-response-section">
+              <h3>Блок / Заява — уточнить</h3>
+              <p className="request-message">
+                Статус <strong>{blockRequest.blockStatus}</strong> поставил <strong>{blockRequest.changedBy}</strong>
+              </p>
+              <p className="request-date">{formatDate(blockRequest.date)}</p>
+              <div className="form-group">
+                <label>Причина блока</label>
+                <textarea
+                  value={blockReason}
+                  onChange={(e) => setBlockReason(e.target.value)}
+                  rows={3}
+                  placeholder="Укажите причину — уйдёт в Telegram..."
+                />
+              </div>
+              <div className="request-actions">
+                <button className="btn-approve" onClick={handleBlockReasonClarify} disabled={loading}>
+                  Отправить причину
+                </button>
+                <button className="btn-banker-request" onClick={handleBlockUnblock} disabled={loading}>
+                  🔓 Сразу разблокировать
+                </button>
+              </div>
+            </div>
+          )}
+
+          {blockRequest?.status === 'resolved' && (
+            <div className="info-section">
+              <h3>Блок / Заява — решено</h3>
+              <p>Банкир: {blockRequest.banker || '—'}</p>
+              <p>{blockRequest.action === 'unblocked' ? '✅ Разблокирован' : `Причина: ${blockRequest.reason || '—'}`}</p>
+              <p className="request-date">{formatDate(blockRequest.resolvedDate)}</p>
             </div>
           )}
 

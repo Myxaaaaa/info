@@ -4,20 +4,24 @@ import SoonToRestTab from './SoonToRestTab'
 import RaiseRequestsTab from './RaiseRequestsTab'
 import OperatorRequestsTab from './OperatorRequestsTab'
 import MyOperatorRequestsTab from './MyOperatorRequestsTab'
+import BlockReasonRequestsTab from './BlockReasonRequestsTab'
+import SectionSelector from './SectionSelector'
 import StatusSettingsModal from './StatusSettingsModal'
 import InfoLKModal from './InfoLKModal'
 import { useData } from '../contexts/DataContext'
 import { useAuth } from '../contexts/AuthContext'
 import './MainTabs.css'
 
-const MainTabs = ({ showRefresh = true, showStatusSettings = true }) => {
-  const { user, canBanker, canOperator } = useAuth()
+const MainTabs = ({ showRefresh = true, showStatusSettings = true, showSectionManage = false }) => {
+  const { user, canBanker, canOperator, canEditSection } = useAuth()
+  const { rows, bankerRequests, operatorRequests, blockReasonRequests, SOON_TO_REST_THRESHOLD, statusOptions, activeSectionId } = useData()
+  const canEditCurrent = canEditSection(activeSectionId)
+
   const operatorUsername = user?.username || ''
   const [activeTab, setActiveTab] = useState('lk')
   const [statusSubTab, setStatusSubTab] = useState('')
   const [showStatusModal, setShowStatusModal] = useState(false)
   const [infoLK, setInfoLK] = useState(null)
-  const { rows, bankerRequests, operatorRequests, SOON_TO_REST_THRESHOLD, statusOptions } = useData()
 
   const counts = useMemo(() => {
     const total = rows.length
@@ -26,6 +30,7 @@ const MainTabs = ({ showRefresh = true, showStatusSettings = true }) => {
       (r) => r?.status === 'pending' || r?.status === 're_raise_pending'
     ).length
     const operatorCount = Object.values(operatorRequests || {}).filter((r) => r?.status === 'pending').length
+    const blockReasonCount = Object.values(blockReasonRequests || {}).filter((r) => r?.status === 'pending').length
     const myOperatorCount = Object.values(operatorRequests || {}).filter(
       (r) => r?.status === 'pending' && r?.operator === operatorUsername
     ).length
@@ -35,11 +40,12 @@ const MainTabs = ({ showRefresh = true, showStatusSettings = true }) => {
     statusOptions.forEach((s) => {
       byStatus[s] = rows.filter((r) => (r.status || '').toLowerCase() === s.toLowerCase()).length
     })
-    return { total, soonCount, raiseCount, operatorCount, myOperatorCount, stopCount, waitCount, byStatus }
-  }, [rows, bankerRequests, operatorRequests, SOON_TO_REST_THRESHOLD, statusOptions, operatorUsername])
+    return { total, soonCount, raiseCount, operatorCount, myOperatorCount, stopCount, waitCount, blockReasonCount, byStatus }
+  }, [rows, bankerRequests, operatorRequests, blockReasonRequests, SOON_TO_REST_THRESHOLD, statusOptions, operatorUsername])
 
   return (
     <div className="main-tabs">
+      <SectionSelector showManage={showSectionManage} />
       <div className="tabs-header">
         <div className="tabs-nav">
           <button
@@ -74,6 +80,14 @@ const MainTabs = ({ showRefresh = true, showStatusSettings = true }) => {
               onClick={() => setActiveTab('operator')}
             >
               Запросы операторов <span className="tab-count">({counts.operatorCount})</span>
+            </button>
+          )}
+          {canBanker && (
+            <button
+              className={`tab-btn ${activeTab === 'blocks' ? 'active' : ''}`}
+              onClick={() => setActiveTab('blocks')}
+            >
+              Блок/Заява <span className="tab-count">({counts.blockReasonCount})</span>
             </button>
           )}
           {canBanker && (
@@ -123,6 +137,7 @@ const MainTabs = ({ showRefresh = true, showStatusSettings = true }) => {
             showRefresh={showRefresh}
             initialStatusFilter={statusSubTab}
             onRowClick={setInfoLK}
+            canEdit={canEditCurrent}
           />
         </div>
       )}
@@ -146,14 +161,19 @@ const MainTabs = ({ showRefresh = true, showStatusSettings = true }) => {
           <OperatorRequestsTab />
         </div>
       )}
+      {activeTab === 'blocks' && canBanker && (
+        <div className="tab-panel">
+          <BlockReasonRequestsTab />
+        </div>
+      )}
       {activeTab === 'stop' && canBanker && (
         <div className="tab-panel">
-          <DataTable showRefresh={showRefresh} rowsOverride={rows.filter((r) => r.onStop)} />
+          <DataTable showRefresh={showRefresh} rowsOverride={rows.filter((r) => r.onStop)} canEdit={canEditCurrent} />
         </div>
       )}
       {activeTab === 'wait' && canBanker && (
         <div className="tab-panel">
-          <DataTable showRefresh={showRefresh} rowsOverride={rows.filter((r) => r.inWaitlist)} />
+          <DataTable showRefresh={showRefresh} rowsOverride={rows.filter((r) => r.inWaitlist)} canEdit={canEditCurrent} />
         </div>
       )}
 

@@ -4,15 +4,17 @@ import { useAdmin } from '../contexts/AdminContext'
 import { useData } from '../contexts/DataContext'
 import MainTabs from './MainTabs'
 import DashboardHeader from './DashboardHeader'
+import UserAccessModal from './UserAccessModal'
 import './AdminDashboard.css'
 import './Dashboard.css'
 
 const AdminDashboard = () => {
-  const { user, users, logout, addUser, deleteUser, changeOwnPassword } = useAuth()
+  const { user, users, logout, addUser, deleteUser, changeOwnPassword, updateUserAccess } = useAuth()
   const { logs, telegramChatId, setTelegramChatId, telegramEnabled } = useAdmin()
-  const { rows, bankerRequests, approveReRaiseByAdmin } = useData()
+  const { rows, bankerRequests, approveReRaiseByAdmin, sections } = useData()
   const [adminTab, setAdminTab] = useState('lk')
   const [showAddUser, setShowAddUser] = useState(false)
+  const [accessUser, setAccessUser] = useState(null)
   const [newUsername, setNewUsername] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [newRole, setNewRole] = useState('user')
@@ -91,7 +93,7 @@ const AdminDashboard = () => {
 
       <main className="dashboard-content admin-content">
         {adminTab === 'lk' && (
-          <MainTabs showRefresh showStatusSettings />
+          <MainTabs showRefresh showStatusSettings showSectionManage />
         )}
 
         {adminTab === 'admin' && (
@@ -138,6 +140,7 @@ const AdminDashboard = () => {
                       <th>Логин</th>
                       <th>Пароль</th>
                       <th>Роль</th>
+                      <th>Доступ</th>
                       <th>Действия</th>
                     </tr>
                   </thead>
@@ -147,6 +150,19 @@ const AdminDashboard = () => {
                         <td>{u.username}</td>
                         <td><code>{u.password}</code></td>
                         <td><span className={`role-badge role-${u.role}`}>{roleLabel(u.role)}</span></td>
+                        <td>
+                          {u.role === 'user' ? (
+                            <button
+                              type="button"
+                              className="btn-access-sm"
+                              onClick={() => setAccessUser(u)}
+                            >
+                              Настроить
+                            </button>
+                          ) : (
+                            <span className="admin-hint">Все секции</span>
+                          )}
+                        </td>
                         <td>
                           {u.id !== user?.id && (
                             <button
@@ -317,6 +333,15 @@ const AdminDashboard = () => {
           </>
         )}
       </main>
+
+      {accessUser && (
+        <UserAccessModal
+          user={accessUser}
+          sections={sections}
+          onClose={() => setAccessUser(null)}
+          onSave={updateUserAccess}
+        />
+      )}
 
       {/* Модалка добавления пользователя */}
       {showAddUser && (

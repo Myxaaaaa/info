@@ -362,3 +362,13 @@
 .users-table-wrap {
   overflow-x: auto;
 }
+
+.btn-access-sm {
+  padding: 0.25rem 0.6rem;
+  border: 1px solid #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+}

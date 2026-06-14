@@ -1,0 +1,64 @@
+.section-selector {
+  margin-bottom: 1rem;
+}
+
+.section-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.section-tab {
+  padding: 0.45rem 1rem;
+  border: 1px solid var(--border-color, #e2e8f0);
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.section-tab.active {
+  background: #2563eb;
+  color: #fff;
+  border-color: #2563eb;
+}
+
+.section-manage {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.section-create-form {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.section-create-form input {
+  padding: 0.4rem 0.6rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  min-width: 180px;
+}
+
+.section-delete-btn {
+  padding: 0.4rem 0.75rem;
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+  color: #b91c1c;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.section-msg {
+  font-size: 0.85rem;
+  color: #047857;
+}
+
+.section-selector-empty {
+  padding: 1rem;
+  background: #fef3c7;
+  border-radius: 8px;
+}

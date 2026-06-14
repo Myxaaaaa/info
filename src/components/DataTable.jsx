@@ -7,7 +7,7 @@ import InfoLKModal from './InfoLKModal'
 import './DataTable.css'
 
 const DataTable = ({ canEdit: canEditProp, showRefresh = true, rowsOverride = null, blinkYellow = false, showSendToRestButton = false, onRowClick = null, initialStatusFilter = null }) => {
-  const { rows: contextRows, updateStatus, updateTurnover, bulkDelete, bulkUpdateStatus, refreshFromJson, statusOptions, getBankerRequest, getOperatorRequest, requestActivateFromRest, requestReRaiseFromRest, getRaisedFromRestDate, isRestStatus, setLKStop, setLKWaitlist, bulkRequestOperatorAction } = useData()
+  const { rows: contextRows, updateStatus, updateTurnover, bulkDelete, bulkUpdateStatus, refreshFromJson, statusOptions, getBankerRequest, getOperatorRequest, getBlockReasonRequest, requestActivateFromRest, requestReRaiseFromRest, getRaisedFromRestDate, isRestStatus, setLKStop, setLKWaitlist, bulkRequestOperatorAction } = useData()
   const rows = rowsOverride ?? contextRows
   const { user, canBanker, canOperator, canEdit: canEditAuth } = useAuth()
   const canEdit = canEditProp ?? canEditAuth
@@ -405,6 +405,9 @@ const DataTable = ({ canEdit: canEditProp, showRefresh = true, rowsOverride = nu
                     {getOperatorRequest(row.id)?.status === 'pending' && canBanker && (
                       <span className="request-badge request-badge-op" title="Запрос оператора">📩</span>
                     )}
+                    {getBlockReasonRequest(row.id)?.status === 'pending' && canBanker && (
+                      <span className="request-badge request-badge-block" title="Уточнить блок/заява">🔒</span>
+                    )}
                     {getOperatorRequest(row.id)?.status === 'pending' && canOperator && !canBanker && (
                       <span className="request-badge" title="Ваш запрос ожидает">⏳</span>
                     )}
@@ -534,6 +537,9 @@ const DataTable = ({ canEdit: canEditProp, showRefresh = true, rowsOverride = nu
               )}
               {getOperatorRequest(row.id)?.status === 'pending' && canBanker && (
                 <span className="request-badge request-badge-op" title="Запрос оператора">📩</span>
+              )}
+              {getBlockReasonRequest(row.id)?.status === 'pending' && canBanker && (
+                <span className="request-badge request-badge-block" title="Уточнить блок/заява">🔒</span>
               )}
               {getOperatorRequest(row.id)?.status === 'pending' && canOperator && !canBanker && (
                 <span className="request-badge" title="Ваш запрос ожидает">⏳</span>

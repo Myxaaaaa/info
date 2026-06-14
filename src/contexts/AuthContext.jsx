@@ -66,7 +66,12 @@ export const AuthProvider = ({ children }) => {
         const res = await fetch('/api/users', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username, password, role }),
+          body: JSON.stringify({
+            username,
+            password,
+            role,
+            createdByAdminId: user?.id,
+          }),
         })
         const data = await res.json()
         if (!res.ok || !data.success) {
@@ -83,8 +88,28 @@ export const AuthProvider = ({ children }) => {
         return { success: false, error: 'Сервер недоступен' }
       }
     },
-    []
+    [user]
   )
+
+  const updateUserAccess = useCallback(async (userId, sectionAccess) => {
+    try {
+      const res = await fetch(`/api/users/${userId}/access`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sectionAccess }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.success) {
+        return { success: false, error: data.error || 'Ошибка' }
+      }
+      const listRes = await fetch('/api/users')
+      const listData = await listRes.json()
+      if (Array.isArray(listData.users)) setUsers(listData.users)
+      return { success: true }
+    } catch {
+      return { success: false, error: 'Сервер недоступен' }
+    }
+  }, [])
 
   const updateUser = useCallback(
     (id, updates) => {
@@ -186,6 +211,30 @@ export const AuthProvider = ({ children }) => {
   // Админ = полный доступ (банкир + оператор)
   const canBanker = isAdmin || isBanker
   const canOperator = isAdmin || isUser
+  const hasFullSectionAccess = isAdmin || isBanker
+
+  const hasRestrictedAccess = isUser && user?.sectionAccess && Object.keys(user.sectionAccess).length > 0
+
+  const canViewSection = useCallback((sectionId) => {
+    if (hasFullSectionAccess) return true
+    if (isUser && !hasRestrictedAccess) return true
+    if (isUser) return !!(user?.sectionAccess?.[sectionId])
+    return false
+  }, [hasFullSectionAccess, hasRestrictedAccess, isUser, user])
+
+  const canEditSection = useCallback((sectionId) => {
+    if (isAdmin || isBanker) return true
+    if (isUser && !hasRestrictedAccess) return true
+    if (isUser) return user?.sectionAccess?.[sectionId] === 'edit'
+    return false
+  }, [isAdmin, isBanker, hasRestrictedAccess, isUser, user])
+
+  const accessibleSections = useCallback((allSections) => {
+    if (hasFullSectionAccess) return allSections
+    if (isUser && !hasRestrictedAccess) return allSections
+    return (allSections || []).filter((s) => user?.sectionAccess?.[s.id])
+  }, [hasFullSectionAccess, hasRestrictedAccess, isUser, user])
+
   const canEdit = !!user
 
   const value = {
@@ -202,10 +251,15 @@ export const AuthProvider = ({ children }) => {
     canBanker,
     canOperator,
     canEdit,
+    hasFullSectionAccess,
+    canViewSection,
+    canEditSection,
+    accessibleSections,
     addUser,
     updateUser,
     deleteUser,
     changeOwnPassword,
+    updateUserAccess,
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
